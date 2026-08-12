@@ -16,3 +16,6 @@ almacen/
 apps/api/almacen/
 .vite/
 *.tsbuildinfo
+
+# Credenciales del despliegue de beta. Nunca se versionan.
+credenciales-beta.txt

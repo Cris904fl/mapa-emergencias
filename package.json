@@ -9,7 +9,7 @@
     "apps/web"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
     "bd:arriba": "docker compose up -d",

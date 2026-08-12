@@ -113,7 +113,7 @@ desarrollo se corrigieron y quedaron con prueba de regresión (ver §9).
 
 | Capa | Tecnología | Versión instalada |
 |---|---|---|
-| Runtime | Node.js | **24.18.0** (mínimo 22) |
+| Runtime | Node.js | **24.18.0** (mínimo real 22.18: antes de esa versión el borrado de tipos no viene activado por defecto) |
 | Lenguaje | TypeScript | 5.9.3 |
 | API | Fastify | 5.11.3 |
 | Validación | Zod | 3.25.76 |
