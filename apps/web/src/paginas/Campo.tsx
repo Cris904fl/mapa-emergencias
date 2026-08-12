@@ -172,25 +172,16 @@ export function Campo() {
 
   // ---- Render ----
   if (!autenticado) {
+    // La pantalla de acceso ocupa la vista completa: es la puerta de entrada al
+    // trabajo en campo, y trae su propio título.
     return (
-      <div className="pagina-campo">
-        <header className="encabezado">
-          <div>
-            <h1>Atención en campo</h1>
-            <p className="subtitulo">
-              Para personal de socorro. Necesita una cuenta creada por quien administra
-              el despliegue.
-            </p>
-          </div>
-        </header>
-        <Acceso
-          autenticado={false}
-          onCambio={(valor, datos) => {
-            setAutenticado(valor);
-            if (datos) setUsuario(datos);
-          }}
-        />
-      </div>
+      <Acceso
+        autenticado={false}
+        onCambio={(valor, datos) => {
+          setAutenticado(valor);
+          if (datos) setUsuario(datos);
+        }}
+      />
     );
   }
 
@@ -208,7 +199,7 @@ export function Campo() {
             </p>
           )}
         </div>
-        <Acceso autenticado onCambio={setAutenticado} compacto />
+        <Acceso autenticado onCambio={setAutenticado} />
       </header>
 
       {/* Estado de ubicación: si no hay, nada de esta pantalla funciona. */}

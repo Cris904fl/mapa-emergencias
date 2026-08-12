@@ -71,7 +71,7 @@ export function App() {
       <main>
         {vista === 'reportar' && <Reportar />}
         {vista === 'campo' && <Campo />}
-        {vista === 'tablero' && <Tablero />}
+        {vista === 'tablero' && <Tablero onIrACampo={() => cambiarVista('campo')} />}
       </main>
     </div>
   );

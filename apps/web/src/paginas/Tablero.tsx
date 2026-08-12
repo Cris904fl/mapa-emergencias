@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Mapa } from '../componentes/Mapa.tsx';
-import { Acceso } from '../componentes/Acceso.tsx';
 import {
   api,
   tieneSesion,
@@ -24,8 +23,14 @@ import {
 
 const INTERVALO_REFRESCO_MS = 20_000;
 
-export function Tablero() {
-  const [autenticado, setAutenticado] = useState(tieneSesion());
+export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
+  /**
+   * El tablero lee la sesión pero no la crea: se entra desde «Atender». Acá la
+   * sesión solo habilita las acciones sobre un reporte; consultar el estado de la
+   * emergencia es abierto a propósito, porque tenerlo detrás de un login no
+   * protege nada y sí estorba a quien necesita mirarlo rápido.
+   */
+  const autenticado = tieneSesion();
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cola, setCola] = useState<ReporteCola[]>([]);
   const [conglomerados, setConglomerados] = useState<Conglomerado[]>([]);
@@ -91,8 +96,21 @@ export function Tablero() {
             </p>
           )}
         </div>
-        <Acceso autenticado={autenticado} onCambio={setAutenticado} compacto />
       </header>
+
+      {/* Sin sesión el tablero se ve completo pero no se puede actuar sobre un
+          reporte. Se dice dónde entrar en lugar de poner otro formulario acá. */}
+      {!autenticado && (
+        <div className="aviso-sesion">
+          <span>
+            Está viendo el tablero <strong>en modo consulta</strong>. Para tomar o cerrar
+            casos, entre desde «Atender».
+          </span>
+          <button type="button" onClick={onIrACampo}>
+            Ir a Atender
+          </button>
+        </div>
+      )}
 
       {error && (
         <p className="error" role="alert">

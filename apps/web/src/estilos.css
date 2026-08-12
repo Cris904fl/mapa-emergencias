@@ -889,21 +889,25 @@ button.cifra {
   min-height: 36px;
 }
 
-.acceso {
+/* Aviso del tablero cuando nadie ha entrado. El tablero no ofrece login: se
+   entra desde «Atender», que es donde la sesión hace falta de verdad. */
+.aviso-sesion {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.75rem;
   flex-wrap: wrap;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  border-left: 4px solid var(--info);
+  border-radius: var(--radio);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  box-shadow: var(--sombra);
 }
 
-.acceso input {
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--linea);
-  border-radius: 8px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  min-height: 40px;
-  max-width: 170px;
+.aviso-sesion strong {
+  font-weight: 600;
 }
 
 /* ----------------------------------------------------------------- campo */
@@ -918,24 +922,185 @@ button.cifra {
   margin: 0 auto;
 }
 
-.acceso-amplio {
-  flex-direction: column;
-  align-items: stretch;
+/* ---- Pantalla de acceso ---- */
+
+.pantalla-acceso {
+  display: flex;
+  justify-content: center;
+  padding: 1.5rem 0 3rem;
+}
+
+.tarjeta-acceso {
+  width: 100%;
+  max-width: 420px;
   background: var(--superficie);
   border: 1px solid var(--linea);
-  border-radius: var(--radio);
-  padding: 1.25rem;
-  box-shadow: var(--sombra);
-  max-width: 340px;
+  border-radius: 14px;
+  padding: 2rem 1.75rem;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%), 0 12px 32px rgb(15 23 42 / 8%);
+  text-align: center;
 }
 
-.acceso-amplio h2 {
-  margin: 0 0 0.25rem;
+.marca-acceso {
+  color: var(--acento);
+  line-height: 0;
+  margin-bottom: 0.75rem;
 }
 
-.acceso-amplio input {
-  max-width: none;
+.tarjeta-acceso h1 {
+  font-size: 1.4rem;
+  margin: 0 0 0.4rem;
+}
+
+.descripcion-acceso {
+  margin: 0 0 1.5rem;
+  color: var(--tenue);
+  font-size: 0.93rem;
+  line-height: 1.45;
+}
+
+.formulario-acceso {
+  text-align: left;
+}
+
+.campo-acceso {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.etiqueta-campo {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tinta-suave);
+  margin-bottom: 0.3rem;
+}
+
+.campo-acceso input {
+  display: block;
   width: 100%;
+  padding: 0.75rem 0.8rem;
+  font-family: inherit;
+  font-size: 1rem;
+  border: 1px solid var(--linea);
+  border-radius: 9px;
+  background: var(--superficie);
+  color: var(--tinta);
+  min-height: 48px;
+}
+
+.campo-acceso input:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+  border-color: var(--acento);
+}
+
+/* El botón de mostrar/ocultar va dentro del campo para no robarle ancho al
+   input, que en un celular ya va justo. */
+.campo-con-boton {
+  position: relative;
+}
+
+.campo-con-boton input {
+  padding-right: 5.2rem;
+}
+
+.boton-ver {
+  position: absolute;
+  top: 50%;
+  right: 0.4rem;
+  transform: translateY(-50%);
+  min-height: 36px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.82rem;
+  border: none;
+  background: var(--fondo);
+  color: var(--info);
+  border-radius: 6px;
+}
+
+.boton-ver:hover {
+  background: #e2e8f0;
+}
+
+.error-acceso {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.8rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 9px;
+  color: var(--alarma);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.nota-acceso {
+  margin: 1.1rem 0 0;
+  font-size: 0.82rem;
+  color: var(--tenue);
+  line-height: 1.45;
+}
+
+/* ---- Cuentas de prueba (solo en desarrollo) ---- */
+
+.cuentas-demo {
+  margin-top: 1.5rem;
+  padding-top: 1.1rem;
+  border-top: 1px dashed var(--linea);
+  text-align: left;
+}
+
+.titulo-demo {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--tenue);
+  margin-bottom: 0.6rem;
+}
+
+.cuentas-demo ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.cuentas-demo button {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  background: var(--fondo);
+  min-height: auto;
+}
+
+.cuentas-demo button:hover {
+  border-color: var(--acento);
+  background: var(--acento-claro);
+}
+
+.cuentas-demo button strong {
+  font-size: 0.9rem;
+}
+
+.cuentas-demo button small {
+  font-size: 0.78rem;
+  color: var(--tinta-suave);
+}
+
+.cuentas-demo code {
+  background: rgb(15 23 42 / 8%);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 .barra-ubicacion {

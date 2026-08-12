@@ -15,6 +15,25 @@ registro público: las cuentas las crea quien administra el despliegue con
 npm run clave --workspace=@emergencias/api -- socorrista@ejemplo.co una-clave-larga
 ```
 
+### La sesión se abre solo desde acá
+
+«Atender» es el único lugar donde se inicia y se cierra sesión. El tablero lee la
+sesión pero no ofrece login: allí la sesión solo habilita acciones sobre un
+reporte, mientras que en campo es la puerta de entrada. Tener un solo sitio donde
+autenticarse evita que alguien quede con sesión abierta desde una pantalla y crea
+que la tiene en la otra.
+
+Sin sesión, el tablero se ve completo en **modo consulta** —mosaicos, mapa, cola,
+todo— con un aviso que remite a «Atender» para poder actuar. Consultar el estado
+de la emergencia es abierto a propósito: ponerlo detrás de un login no protege
+nada y estorba a quien necesita mirarlo rápido.
+
+En desarrollo la pantalla de acceso lista las cuentas de la semilla y las llena
+con un toque, para no tener que buscarlas en el README. Ese bloque va dentro de un
+`import.meta.env.DEV`, así que Vite lo elimina del build de producción — se
+verificó que las cadenas no quedan en el bundle (sí en el source map, que por
+diseño lleva el código original).
+
 La pantalla asume un celular, en la calle, con una mano ocupada y con prisa. De
 ahí que la distancia esté en el elemento más grande de cada tarjeta, que las
 acciones sean de un toque, y que el contacto del ciudadano sea un enlace `tel:`
