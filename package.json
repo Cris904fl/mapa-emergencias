@@ -1,0 +1,26 @@
+{
+  "name": "mapa-emergencias",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mapa inteligente de afectaciones: reportes ciudadanos, PostGIS y priorización asistida por IA",
+  "license": "MIT",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "bd:arriba": "docker compose up -d",
+    "bd:abajo": "docker compose down",
+    "bd:migrar": "npm run migrar --workspace=@emergencias/api",
+    "bd:sembrar": "npm run sembrar --workspace=@emergencias/api",
+    "bd:reiniciar": "docker compose down -v && docker compose up -d && node scripts/esperar-bd.mjs && npm run bd:migrar && npm run bd:sembrar",
+    "dev:api": "npm run dev --workspace=@emergencias/api",
+    "dev:web": "npm run dev --workspace=@emergencias/web",
+    "construir": "npm run construir --workspace=@emergencias/api && npm run construir --workspace=@emergencias/web",
+    "probar": "npm run probar --workspace=@emergencias/api",
+    "tipos": "npm run tipos --workspace=@emergencias/api && npm run tipos --workspace=@emergencias/web"
+  }
+}

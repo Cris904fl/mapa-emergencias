@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgis/postgis:17-3.5
+    container_name: emergencias_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-emergencias}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-emergencias}
+      POSTGRES_DB: ${POSTGRES_DB:-emergencias}
+    # 5434 en el host: 5432 y 5433 ya están tomados por otros proyectos
+    # (aduanas_postgres usa 5433), y 5435 por ocr_db.
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgres_datos:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-emergencias} -d ${POSTGRES_DB:-emergencias}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: emergencias_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    # 6381 porque ocr_redis ocupa 6380.
+    ports:
+      - "${REDIS_PORT:-6381}:6379"
+    volumes:
+      - redis_datos:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_datos:
+  redis_datos:

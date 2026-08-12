@@ -1,0 +1,35 @@
+{
+  "name": "@emergencias/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API Fastify sobre PostGIS para el mapa de afectaciones",
+  "scripts": {
+    "dev": "node --watch --env-file=../../.env src/servidor.ts",
+    "iniciar": "node --env-file=../../.env src/servidor.ts",
+    "trabajadores": "node --env-file=../../.env src/trabajadores/index.ts",
+    "migrar": "node --env-file=../../.env src/db/migrar.ts",
+    "sembrar": "node --env-file=../../.env src/db/sembrar.ts",
+    "clave": "node --env-file=../../.env src/db/hash-clave.ts",
+    "probar": "node --env-file=../../.env.pruebas --test --test-concurrency=1 \"test/**/*.test.ts\"",
+    "tipos": "tsc --noEmit",
+    "construir": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "@fastify/cors": "^11.0.1",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.0.3",
+    "@fastify/rate-limit": "^10.3.0",
+    "bullmq": "^5.56.0",
+    "fastify": "^5.4.0",
+    "ioredis": "^5.6.1",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "@types/pg": "^8.15.4",
+    "typescript": "^5.8.3"
+  }
+}

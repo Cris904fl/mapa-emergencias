@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    // Node 24 ejecuta TypeScript directamente quitando los tipos, así que no
+    // hay paso de compilación: `tsc` acá solo revisa tipos (--noEmit). Eso
+    // obliga a escribir las importaciones con extensión .ts explícita, que es
+    // exactamente lo que espera el cargador de Node.
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"],
+
+    // Prohíbe la sintaxis que Node no puede simplemente borrar: enums,
+    // namespaces con valor, propiedades de parámetro en constructores. Sin
+    // esto el error aparece al arrancar el proceso en lugar de al revisar
+    // tipos, que es tarde y confuso.
+    "erasableSyntaxOnly": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

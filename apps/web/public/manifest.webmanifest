@@ -1,0 +1,33 @@
+{
+  "name": "Reporte de emergencias",
+  "short_name": "Emergencias",
+  "description": "Reporte de afectaciones que funciona sin conexión: se guarda en el dispositivo y se envía cuando vuelve la señal.",
+  "lang": "es-CO",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Reportar ahora",
+      "short_name": "Reportar",
+      "url": "/?vista=reportar"
+    },
+    {
+      "name": "Tablero de la sala de crisis",
+      "short_name": "Tablero",
+      "url": "/?vista=tablero"
+    }
+  ]
+}

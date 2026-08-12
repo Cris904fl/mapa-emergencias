@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+# .env.pruebas sí se versiona: solo valores locales, y así la suite corre
+# sin configuración en cualquier máquina.
+!.env.pruebas
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+coverage/
+almacen/
+apps/api/almacen/
+.vite/
+*.tsbuildinfo

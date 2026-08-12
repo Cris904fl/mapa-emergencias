@@ -1,0 +1,13 @@
+# Normaliza finales de línea a LF en el repositorio y evita el ruido de avisos
+# CRLF al trabajar desde Windows. En el disco cada quien mantiene los de su
+# sistema; lo que se guarda es siempre LF.
+* text=auto eol=lf
+
+# Binarios: no tocar.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.pdf binary
+*.ico binary

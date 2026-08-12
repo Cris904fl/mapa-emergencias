@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Reporte de emergencias">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <!-- Marcador de ubicación con un signo de alerta: el mapa y la urgencia, que
+       son las dos ideas de la aplicación. -->
+  <path d="M256 96c-62 0-112 50-112 112 0 78 112 208 112 208s112-130 112-208c0-62-50-112-112-112z"
+        fill="#f97316"/>
+  <rect x="242" y="150" width="28" height="86" rx="14" fill="#0f172a"/>
+  <circle cx="256" cy="266" r="17" fill="#0f172a"/>
+</svg>
