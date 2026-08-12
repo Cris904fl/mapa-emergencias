@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Mapa } from '../componentes/Mapa.tsx';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   api,
   tieneSesion,
@@ -22,6 +21,22 @@ import {
  */
 
 const INTERVALO_REFRESCO_MS = 20_000;
+
+/**
+ * El mapa se carga aparte del resto de la aplicación.
+ *
+ * MapLibre pesa más que todo lo demás junto y solo lo usa esta pantalla. La
+ * vista «Reportar» —un ciudadano con la red caída, que es el caso de uso que
+ * justifica toda la arquitectura sin conexión— no tiene por qué descargarlo
+ * antes de poder escribir una línea. Detrás de un `import()` dinámico el
+ * empaquetador lo saca a su propio trozo y esa pantalla deja de pedirlo.
+ *
+ * El componente se exporta con nombre, así que hay que traducirlo a `default`:
+ * es lo único que `lazy` sabe leer.
+ */
+const Mapa = lazy(() =>
+  import('../componentes/Mapa.tsx').then((modulo) => ({ default: modulo.Mapa })),
+);
 
 export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
   /**
@@ -137,7 +152,11 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
       )}
 
       <section className="seccion-mapa">
-        <Mapa reportes={reportesGeo} recursos={recursosGeo} onSeleccionar={setExpandido} />
+        {/* El marcador ocupa el mismo alto que el mapa para que la cola de
+            atención no salte hacia arriba y vuelva a bajar mientras carga. */}
+        <Suspense fallback={<div className="mapa-cargando">Cargando el mapa…</div>}>
+          <Mapa reportes={reportesGeo} recursos={recursosGeo} onSeleccionar={setExpandido} />
+        </Suspense>
       </section>
 
       <div className="rejilla-paneles">

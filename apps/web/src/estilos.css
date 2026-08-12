@@ -607,6 +607,22 @@ button.cifra {
   width: 100%;
 }
 
+/* Marcador de posición mientras se descarga el trozo del mapa. Repite el alto
+   y el marco de .envoltorio-mapa a propósito: si ocupara menos, el resto del
+   tablero saltaría al terminar la carga. */
+.mapa-cargando {
+  height: 440px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radio);
+  border: 1px solid var(--linea);
+  background: var(--superficie);
+  color: var(--tenue);
+  font-size: 0.92rem;
+}
+
 .leyenda {
   position: absolute;
   bottom: 0.6rem;
@@ -1440,7 +1456,8 @@ button.cifra {
     grid-template-columns: 1fr;
   }
 
-  .mapa {
+  .mapa,
+  .mapa-cargando {
     height: 320px;
   }
 }
