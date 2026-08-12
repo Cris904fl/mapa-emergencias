@@ -76,6 +76,28 @@ const esquema = z.object({
   // Píxeles del lado largo a los que la PWA reduce cada foto antes de subirla.
   // Se define acá para que cliente y servidor compartan el mismo número.
   IA_IMAGEN_LADO_MAX: z.coerce.number().int().positive().default(1568),
+
+  /**
+   * Motor de ruteo con API de OSRM.
+   *
+   * El valor por defecto es el servidor de demostración público del proyecto
+   * OSRM: no pide clave y sirve para desarrollo, pero su política de uso no
+   * permite tráfico de producción. Para algo real hay que levantar un OSRM
+   * propio (una imagen Docker y un extracto de OpenStreetMap de Colombia) y
+   * apuntar esta variable ahí.
+   *
+   * Vacío = sin ruteo: la API responde con distancia en línea recta y lo marca
+   * como tal, para que la interfaz no presente una estimación como si fuera una
+   * ruta.
+   */
+  RUTEO_URL: z.string().default('https://router.project-osrm.org'),
+
+  /**
+   * Distancia a la que un reporte de vía bloqueada se considera un obstáculo
+   * sobre la ruta propuesta. 60 m cubre el ancho de una calzada y sus
+   * aproximaciones sin marcar como obstáculo todo lo que hay a una cuadra.
+   */
+  RUTEO_RADIO_OBSTACULO_M: z.coerce.number().int().positive().default(60),
 });
 
 const analisis = esquema.safeParse(process.env);

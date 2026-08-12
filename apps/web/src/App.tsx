@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
 import { Reportar } from './paginas/Reportar.tsx';
 import { Tablero } from './paginas/Tablero.tsx';
+import { Campo } from './paginas/Campo.tsx';
 import { iniciarSincronizacionAutomatica } from './lib/bandeja.ts';
 
-type Vista = 'reportar' | 'tablero';
+type Vista = 'reportar' | 'campo' | 'tablero';
+
+const VISTAS: { id: Vista; etiqueta: string }[] = [
+  { id: 'reportar', etiqueta: 'Reportar' },
+  { id: 'campo', etiqueta: 'Atender' },
+  { id: 'tablero', etiqueta: 'Tablero' },
+];
 
 function vistaInicial(): Vista {
   const parametro = new URLSearchParams(location.search).get('vista');
-  return parametro === 'tablero' ? 'tablero' : 'reportar';
+  return VISTAS.some((vista) => vista.id === parametro) ? (parametro as Vista) : 'reportar';
 }
 
 export function App() {
@@ -48,25 +55,24 @@ export function App() {
       )}
 
       <nav className="navegacion" aria-label="Secciones">
-        <button
-          type="button"
-          className={vista === 'reportar' ? 'activa' : ''}
-          onClick={() => cambiarVista('reportar')}
-          aria-current={vista === 'reportar' ? 'page' : undefined}
-        >
-          Reportar
-        </button>
-        <button
-          type="button"
-          className={vista === 'tablero' ? 'activa' : ''}
-          onClick={() => cambiarVista('tablero')}
-          aria-current={vista === 'tablero' ? 'page' : undefined}
-        >
-          Tablero
-        </button>
+        {VISTAS.map((opcion) => (
+          <button
+            key={opcion.id}
+            type="button"
+            className={vista === opcion.id ? 'activa' : ''}
+            onClick={() => cambiarVista(opcion.id)}
+            aria-current={vista === opcion.id ? 'page' : undefined}
+          >
+            {opcion.etiqueta}
+          </button>
+        ))}
       </nav>
 
-      <main>{vista === 'reportar' ? <Reportar /> : <Tablero />}</main>
+      <main>
+        {vista === 'reportar' && <Reportar />}
+        {vista === 'campo' && <Campo />}
+        {vista === 'tablero' && <Tablero />}
+      </main>
     </div>
   );
 }

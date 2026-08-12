@@ -4,6 +4,7 @@ import { bd } from '../db/pool.ts';
 import { config } from '../config.ts';
 import { pesosVigentes, refrescarPrioridadesVencidas } from '../servicios/prioridad.ts';
 import { solicitudInvalida } from '../lib/errores.ts';
+import { condicionDeFiltro, etiquetaDeFiltro, zFiltro } from '../esquemas/filtros.ts';
 
 /**
  * Consultas agregadas para el tablero de la sala de crisis. Todas de lectura y
@@ -24,20 +25,34 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
     const limite = Math.min(Number.parseInt(consulta.limite ?? '50', 10) || 50, 500);
     const vivo = consulta.vivo === 'true';
 
-    if (vivo) {
-      const { rows } = await bd.consultar(
-        `SELECT id, codigo_publico, categoria, severidad, estado, descripcion,
-                personas_afectadas, personas_atrapadas, personas_heridas,
-                personas_vulnerables, requiere_rescate, origen_triage,
-                reportado_en, primera_respuesta_en, lugar, lat, lng,
-                score, componentes
-           FROM v_cola_prioridad_vivo
-          ORDER BY score DESC
-          LIMIT $1`,
-        [limite],
-      );
-      return { modo: 'vivo', pesos: await pesosVigentes(), reportes: rows };
+    // El filtro llega como el nombre del mosaico que se tocó en el tablero.
+    const nombreFiltro = consulta.filtro
+      ? zFiltro.safeParse(consulta.filtro)
+      : { success: false as const };
+    const filtro = nombreFiltro.success ? nombreFiltro.data : undefined;
+    if (consulta.filtro && !filtro) {
+      throw solicitudInvalida(`Filtro desconocido: ${consulta.filtro}`);
     }
+
+    const { condicion, incluyeCerrados } = condicionDeFiltro(filtro);
+
+    // La vista viva no expone todas las columnas que usan los filtros, así que
+    // se filtra sobre la tabla y se recalcula el puntaje al vuelo por fila. Es
+    // el mismo compromiso que ya tenía el modo vivo: exactitud a cambio de una
+    // llamada a función por fila.
+    const donde = [
+      incluyeCerrados ? null : `r.estado NOT IN ('RESUELTO', 'DUPLICADO', 'DESCARTADO')`,
+      condicion,
+    ]
+      .filter(Boolean)
+      .join(' AND ');
+
+    const puntaje = vivo
+      ? `(fn_prioridad_reporte(r.id)->>'score')::numeric`
+      : 'r.prioridad_score';
+    const componentes = vivo
+      ? `fn_prioridad_reporte(r.id)->'componentes'`
+      : 'r.prioridad_componentes';
 
     const { rows } = await bd.consultar(
       `SELECT r.id, r.codigo_publico, r.categoria, r.severidad, r.estado, r.descripcion,
@@ -45,20 +60,30 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
               r.personas_vulnerables, r.requiere_rescate, r.origen_triage,
               r.reportado_en, r.primera_respuesta_en,
               l.nombre AS lugar,
+              u.nombre AS responsable,
+              r.tomado_en,
               ST_Y(r.geom::geometry) AS lat,
               ST_X(r.geom::geometry) AS lng,
-              r.prioridad_score AS score,
-              r.prioridad_componentes AS componentes,
+              ${puntaje} AS score,
+              ${componentes} AS componentes,
               r.prioridad_calculada_en
          FROM reportes r
-         LEFT JOIN lugares l ON l.id = r.lugar_id
-        WHERE r.estado NOT IN ('RESUELTO', 'DUPLICADO', 'DESCARTADO')
-        ORDER BY r.prioridad_score DESC NULLS LAST, r.reportado_en
+         LEFT JOIN lugares l  ON l.id = r.lugar_id
+         LEFT JOIN usuarios u ON u.id = r.responsable_id
+        WHERE ${donde}
+        ORDER BY ${vivo ? 'score' : 'r.prioridad_score'} DESC NULLS LAST, r.reportado_en
         LIMIT $1`,
       [limite],
     );
 
-    return { modo: 'materializado', pesos: await pesosVigentes(), reportes: rows };
+    return {
+      modo: vivo ? 'vivo' : 'materializado',
+      filtro: filtro ?? null,
+      filtro_etiqueta: filtro ? etiquetaDeFiltro(filtro) : null,
+      total: rows.length,
+      pesos: await pesosVigentes(),
+      reportes: rows,
+    };
   });
 
   /**

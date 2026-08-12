@@ -20,7 +20,8 @@ Ciudadano → PWA (offline-first) → API Fastify → PostgreSQL + PostGIS
 | Índice de prioridad con pesos versionados y desglose explicable | 11 pruebas |
 | API Fastify (reportes, recursos, tablero, sesión, medios) | 20 pruebas |
 | PWA offline-first (IndexedDB + service worker + Background Sync) | Verificada en navegador |
-| Tablero GIS (MapLibre, DBSCAN, zonas, cola priorizada) | Verificado en navegador |
+| Tablero GIS (MapLibre, DBSCAN, zonas, cola priorizada, filtros por KPI) | Verificado en navegador |
+| Atención en campo (tomar caso, ruta, cerrar) — [`docs/campo.md`](docs/campo.md) | 17 pruebas + verificado en navegador |
 | Extracción de texto libre con Ollama (modelo local, gratis) | Medida y calibrada — [`docs/ia-local.md`](docs/ia-local.md) |
 | Los mismos prompts sobre Groq/OpenRouter o Anthropic | Escrito, sin medir |
 | Etiquetado multimodal de fotos | Escrito, sin medir (requiere modelo con visión) |
@@ -66,6 +67,14 @@ npm run probar --workspace=@emergencias/api
 Corren contra `emergencias_test`, una base separada que la suite crea sola. Hay
 una salvaguarda que aborta si `DATABASE_URL` no apunta a una base cuyo nombre
 termine en `_test`: la suite hace `TRUNCATE`.
+
+Tres pantallas, tres usuarios distintos:
+
+| Vista | Para quién | Necesita cuenta |
+|---|---|---|
+| **Reportar** | ciudadano | no |
+| **Atender** | rescatista en campo | sí |
+| **Tablero** | sala de crisis | solo para actuar |
 
 ## Decisiones que vale la pena conocer
 
@@ -156,6 +165,25 @@ Limitación conocida: el service worker sincroniza el texto de los reportes, no
 las fotos. Subir multipart desde el service worker es posible pero suma
 complejidad; las fotos las sube la página en cuanto se abre de nuevo.
 
+### La ruta al caso conoce las vías que los ciudadanos reportaron bloqueadas
+
+Un motor de ruteo usa el grafo vial de OpenStreetMap, que refleja las calles en un
+día normal. En una emergencia están tapadas con escombros o cortadas por un
+deslizamiento — y este sistema ya sabe cuáles. Así que la ruta se cruza contra los
+reportes abiertos que la obstruyen y se listan por el orden en que el rescatista
+los va a encontrar. No se recalcula evitándolos, y la interfaz lo dice: eso
+necesita pgRouting y es otro proyecto.
+
+Medición de por qué la línea recta no sirve: 740 m en línea recta contra 2527 m
+por calles para el mismo par de puntos. Detalle en [`docs/campo.md`](docs/campo.md).
+
+### Tomar un caso es exclusivo, y el candado está en el `WHERE`
+
+Si dos rescatistas toman el mismo reporte, dos equipos salen al mismo sitio y otro
+pedido de auxilio se queda sin nadie. La condición va en el `UPDATE` mismo, no en
+una lectura previa —que dejaría una ventana entre leer y escribir— y el segundo
+recibe 409 con el nombre de quien lo tiene, para poder coordinar por radio.
+
 ### Otras
 
 - **`geography` y no `geometry`** en todas las columnas espaciales: las consultas
@@ -227,6 +255,8 @@ recurso · posibles duplicados · ocupación de albergues.
   reintento y el defecto que apareció al probarlo.
 - [`docs/ia-local.md`](docs/ia-local.md) — Ollama, las tres iteraciones medidas
   del prompt, y qué no se le deja escribir al modelo.
+- [`docs/campo.md`](docs/campo.md) — la pantalla del rescatista: las dos
+  ordenaciones, la ruta con obstáculos y el candado al tomar un caso.
 - [`docs/despliegue-gratuito.md`](docs/despliegue-gratuito.md) — cómo publicarlo
   sin pagar, y por qué Ollama no cabe en una capa gratuita.
 

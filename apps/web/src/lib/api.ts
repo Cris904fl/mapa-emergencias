@@ -139,6 +139,67 @@ export type Zona = {
   lng: number;
 };
 
+/** Nombres de filtro, espejo de apps/api/src/esquemas/filtros.ts. */
+export type NombreFiltro =
+  | 'abiertos'
+  | 'criticos'
+  | 'atrapadas'
+  | 'heridas'
+  | 'sin_atender'
+  | 'sin_triage'
+  | 'rescate'
+  | 'ia_sin_revisar'
+  | 'sin_responsable'
+  | 'resueltos';
+
+export type CasoCampo = {
+  id: string;
+  codigo_publico: string;
+  categoria: string;
+  severidad: string;
+  estado: string;
+  descripcion: string | null;
+  personas_afectadas: number;
+  personas_atrapadas: number;
+  personas_heridas: number;
+  personas_vulnerables: number;
+  requiere_rescate: boolean;
+  contacto_reportante: string | null;
+  reportado_en: string;
+  prioridad_score: number | null;
+  lugar: string | null;
+  lat: number;
+  lng: number;
+  responsable_id: string | null;
+  responsable: string | null;
+  tomado_en: string | null;
+  es_mio: boolean;
+  distancia_m: number;
+};
+
+export type Obstaculo = {
+  id: string;
+  codigo_publico: string;
+  categoria: string;
+  severidad: string;
+  lat: number;
+  lng: number;
+  distancia_a_ruta_m: number;
+  metros_desde_origen: number;
+  descripcion: string | null;
+};
+
+export type RutaCaso = {
+  caso: { id: string; codigo_publico: string };
+  destino: { lat: number; lng: number };
+  tipo: 'vial' | 'linea_recta';
+  distancia_m: number;
+  duracion_s: number | null;
+  geometria: { type: 'LineString'; coordinates: [number, number][] };
+  obstaculos: Obstaculo[];
+  aviso?: string;
+};
+
 export type ColeccionGeoJson = {
   type: 'FeatureCollection';
   features: {
@@ -163,9 +224,15 @@ export const api = {
 
   resumen: () => pedir<Resumen>('/v1/tablero/resumen'),
 
-  cola: (limite = 50, vivo = false) =>
-    pedir<{ modo: string; reportes: ReporteCola[] }>(
-      `/v1/tablero/cola?limite=${limite}&vivo=${vivo}`,
+  cola: (limite = 50, vivo = false, filtro?: NombreFiltro) =>
+    pedir<{
+      modo: string;
+      filtro: NombreFiltro | null;
+      filtro_etiqueta: string | null;
+      total: number;
+      reportes: ReporteCola[];
+    }>(
+      `/v1/tablero/cola?limite=${limite}&vivo=${vivo}${filtro ? `&filtro=${filtro}` : ''}`,
     ),
 
   conglomerados: (radioM = 300) =>
@@ -176,8 +243,8 @@ export const api = {
   aislados: (umbralM = 5000) =>
     pedir<{ reportes: ReporteCola[] }>(`/v1/tablero/aislados?umbral_m=${umbralM}`),
 
-  reportesGeoJson: (bbox?: string) =>
-    pedir<ColeccionGeoJson>(`/v1/reportes${bbox ? `?bbox=${bbox}&limite=500` : '?limite=500'}`),
+  reportesGeoJson: (filtro?: NombreFiltro) =>
+    pedir<ColeccionGeoJson>(`/v1/reportes?limite=500${filtro ? `&filtro=${filtro}` : ''}`),
 
   recursosGeoJson: () => pedir<ColeccionGeoJson>('/v1/recursos'),
 
@@ -197,4 +264,51 @@ export const api = {
     pedir<{ estado: string; comprobaciones: Record<string, { ok: boolean; detalle?: string }> }>(
       '/listo',
     ),
+
+  // ---- Campo ----
+
+  reportarPosicion: (lat: number, lng: number, precision_m?: number) =>
+    pedir<{ registrada_en: string }>('/v1/campo/posicion', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lng, precision_m }),
+    }),
+
+  casosCercanos: (
+    lat: number,
+    lng: number,
+    opciones: { orden?: 'prioridad' | 'distancia'; radio_m?: number; solo_libres?: boolean } = {},
+  ) => {
+    const parametros = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+      orden: opciones.orden ?? 'prioridad',
+      radio_m: String(opciones.radio_m ?? 10_000),
+      limite: '30',
+    });
+    if (opciones.solo_libres) parametros.set('solo_libres', 'true');
+    return pedir<{ orden: string; casos: CasoCampo[] }>(`/v1/campo/casos?${parametros}`);
+  },
+
+  misCasos: () => pedir<{ casos: CasoCampo[] }>('/v1/campo/mis-casos'),
+
+  rutaHasta: (idCaso: string, lat: number, lng: number) =>
+    pedir<RutaCaso>(`/v1/campo/casos/${idCaso}/ruta?lat=${lat}&lng=${lng}`),
+
+  tomarCaso: (idCaso: string) =>
+    pedir<{ tomado: boolean; codigo_publico: string; estado: string }>(
+      `/v1/campo/casos/${idCaso}/tomar`,
+      { method: 'POST' },
+    ),
+
+  liberarCaso: (idCaso: string) =>
+    pedir<{ liberado: boolean }>(`/v1/campo/casos/${idCaso}/liberar`, { method: 'POST' }),
+
+  marcarEnAtencion: (idCaso: string) =>
+    pedir<{ estado: string }>(`/v1/campo/casos/${idCaso}/en-atencion`, { method: 'POST' }),
+
+  resolverCaso: (idCaso: string, nota?: string, personas_atendidas?: number) =>
+    pedir<{ estado: string; nota: string }>(`/v1/campo/casos/${idCaso}/resolver`, {
+      method: 'POST',
+      body: JSON.stringify({ nota, personas_atendidas }),
+    }),
 };

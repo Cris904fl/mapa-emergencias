@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Mapa } from '../componentes/Mapa.tsx';
+import { Acceso } from '../componentes/Acceso.tsx';
 import {
   api,
-  fijarToken,
   tieneSesion,
   ErrorApi,
   type ColeccionGeoJson,
   type Conglomerado,
+  type NombreFiltro,
   type ReporteCola,
   type Resumen,
   type Zona,
@@ -35,18 +36,27 @@ export function Tablero() {
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  /**
+   * Filtro activo, elegido tocando una cifra de cabecera. Se aplica a la lista y
+   * al mapa a la vez: si el mosaico dice «3 críticos» y el mapa muestra doce
+   * puntos, el operador deja de confiar en el tablero.
+   */
+  const [filtro, setFiltro] = useState<NombreFiltro | null>(null);
+  const [etiquetaFiltro, setEtiquetaFiltro] = useState<string | null>(null);
+
   const cargar = useCallback(async () => {
     try {
       const [r, c, g, z, rg, recg] = await Promise.all([
         api.resumen(),
-        api.cola(50),
+        api.cola(50, false, filtro ?? undefined),
         api.conglomerados(300),
         api.zonas(),
-        api.reportesGeoJson(),
+        api.reportesGeoJson(filtro ?? undefined),
         api.recursosGeoJson(),
       ]);
       setResumen(r);
       setCola(c.reportes);
+      setEtiquetaFiltro(c.filtro_etiqueta);
       setConglomerados(g.conglomerados);
       setZonas(z.zonas);
       setReportesGeo(rg);
@@ -61,7 +71,7 @@ export function Tablero() {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [filtro]);
 
   useEffect(() => {
     void cargar();
@@ -81,7 +91,7 @@ export function Tablero() {
             </p>
           )}
         </div>
-        <Acceso autenticado={autenticado} onCambio={setAutenticado} />
+        <Acceso autenticado={autenticado} onCambio={setAutenticado} compacto />
       </header>
 
       {error && (
@@ -91,7 +101,22 @@ export function Tablero() {
       )}
       {cargando && <p className="cargando">Cargando…</p>}
 
-      {resumen && <Cifras resumen={resumen} />}
+      {resumen && (
+        <Cifras
+          resumen={resumen}
+          filtroActivo={filtro}
+          onFiltrar={(nuevo) => setFiltro(nuevo === filtro ? null : nuevo)}
+        />
+      )}
+
+      {filtro && (
+        <div className="barra-filtro" role="status">
+          Mostrando solo reportes <strong>{etiquetaFiltro ?? filtro}</strong> ({cola.length})
+          <button type="button" className="enlace" onClick={() => setFiltro(null)}>
+            quitar filtro
+          </button>
+        </div>
+      )}
 
       <section className="seccion-mapa">
         <Mapa reportes={reportesGeo} recursos={recursosGeo} onSeleccionar={setExpandido} />
@@ -181,26 +206,71 @@ export function Tablero() {
   );
 }
 
-function Cifras({ resumen }: { resumen: Resumen }) {
+function Cifras({
+  resumen,
+  filtroActivo,
+  onFiltrar,
+}: {
+  resumen: Resumen;
+  filtroActivo: NombreFiltro | null;
+  onFiltrar: (filtro: NombreFiltro) => void;
+}) {
   const r = resumen.reportes;
   const espera = resumen.espera_maxima_minutos;
 
   return (
     <section className="cifras" aria-label="Cifras principales">
-      <Cifra valor={r.abiertos} etiqueta="abiertos" />
-      <Cifra valor={r.criticos} etiqueta="críticos" tono="alarma" />
-      <Cifra valor={r.personas_atrapadas} etiqueta="personas atrapadas" tono="alarma" />
-      <Cifra valor={r.personas_heridas} etiqueta="personas heridas" tono="aviso" />
-      <Cifra valor={r.sin_atender} etiqueta="sin atender" tono="aviso" />
+      <Cifra valor={r.abiertos} etiqueta="abiertos" filtro="abiertos" {...{ filtroActivo, onFiltrar }} />
+      <Cifra valor={r.criticos} etiqueta="críticos" tono="alarma" filtro="criticos" {...{ filtroActivo, onFiltrar }} />
+      {/* Aquí la cifra y el filtro tienen unidades distintas a propósito: el
+          mosaico cuenta PERSONAS atrapadas, el filtro trae los REPORTES que las
+          tienen. Se aclara en el título para que no parezca un descuadre. */}
+      <Cifra
+        valor={r.personas_atrapadas}
+        etiqueta="personas atrapadas"
+        tono="alarma"
+        filtro="atrapadas"
+        titulo="Toque para ver los reportes con personas atrapadas"
+        {...{ filtroActivo, onFiltrar }}
+      />
+      <Cifra
+        valor={r.personas_heridas}
+        etiqueta="personas heridas"
+        tono="aviso"
+        filtro="heridas"
+        titulo="Toque para ver los reportes con personas heridas"
+        {...{ filtroActivo, onFiltrar }}
+      />
+      <Cifra valor={r.sin_atender} etiqueta="sin atender" tono="aviso" filtro="sin_atender" {...{ filtroActivo, onFiltrar }} />
       <Cifra
         valor={espera === null ? '—' : espera >= 60 ? `${Math.floor(espera / 60)} h` : `${espera} min`}
         etiqueta="espera más larga"
         tono={espera !== null && espera > 240 ? 'alarma' : 'normal'}
+        filtro="sin_atender"
+        titulo="Toque para ver todo lo que está sin atender"
+        {...{ filtroActivo, onFiltrar }}
       />
-      <Cifra valor={resumen.recursos.disponibles} etiqueta="recursos disponibles" />
+      <Cifra valor={r.sin_triage} etiqueta="sin triage" filtro="sin_triage" {...{ filtroActivo, onFiltrar }} />
+      <Cifra
+        valor={r.con_rescate_pendiente}
+        etiqueta="rescate pendiente"
+        tono="alarma"
+        filtro="rescate"
+        {...{ filtroActivo, onFiltrar }}
+      />
       {/* Cuántos reportes tocó la IA y cuántos una persona: hace visible el
-          reparto de trabajo entre ambos en vez de esconderlo. */}
-      <Cifra valor={`${r.triados_por_persona} / ${r.triados_por_ia}`} etiqueta="triage persona / IA" />
+          reparto de trabajo entre ambos en vez de esconderlo. Al tocarlo se ve
+          justo lo que la IA escribió y nadie confirmó todavía. */}
+      <Cifra
+        valor={`${r.triados_por_persona} / ${r.triados_por_ia}`}
+        etiqueta="triage persona / IA"
+        filtro="ia_sin_revisar"
+        titulo="Toque para revisar lo que escribió la IA"
+        {...{ filtroActivo, onFiltrar }}
+      />
+      <Cifra valor={r.resueltos} etiqueta="resueltos" filtro="resueltos" {...{ filtroActivo, onFiltrar }} />
+      {/* Los recursos no son reportes: este no filtra la cola. */}
+      <Cifra valor={resumen.recursos.disponibles} etiqueta="recursos disponibles" />
     </section>
   );
 }
@@ -209,16 +279,44 @@ function Cifra({
   valor,
   etiqueta,
   tono = 'normal',
+  filtro,
+  filtroActivo,
+  onFiltrar,
+  titulo,
 }: {
   valor: number | string;
   etiqueta: string;
   tono?: 'normal' | 'aviso' | 'alarma';
+  filtro?: NombreFiltro;
+  filtroActivo?: NombreFiltro | null;
+  onFiltrar?: (filtro: NombreFiltro) => void;
+  titulo?: string;
 }) {
-  return (
-    <div className={`cifra ${tono}`}>
+  const contenido = (
+    <>
       <span className="valor">{valor}</span>
       <span className="etiqueta">{etiqueta}</span>
-    </div>
+    </>
+  );
+
+  // Sin filtro asociado se renderiza como texto y no como botón: un control que
+  // parece pulsable y no hace nada es peor que uno que no lo parece.
+  if (!filtro || !onFiltrar) {
+    return <div className={`cifra ${tono}`}>{contenido}</div>;
+  }
+
+  const activo = filtroActivo === filtro;
+
+  return (
+    <button
+      type="button"
+      className={`cifra pulsable ${tono} ${activo ? 'activa' : ''}`}
+      onClick={() => onFiltrar(filtro)}
+      aria-pressed={activo}
+      title={titulo ?? `Toque para filtrar: ${etiqueta}`}
+    >
+      {contenido}
+    </button>
   );
 }
 
@@ -378,75 +476,3 @@ function FilaCola({
   );
 }
 
-function Acceso({
-  autenticado,
-  onCambio,
-}: {
-  autenticado: boolean;
-  onCambio: (valor: boolean) => void;
-}) {
-  const [abierto, setAbierto] = useState(false);
-  const [correo, setCorreo] = useState('');
-  const [clave, setClave] = useState('');
-  const [error, setError] = useState<string | null>(null);
-
-  if (autenticado) {
-    return (
-      <button
-        type="button"
-        className="enlace"
-        onClick={() => {
-          fijarToken(null);
-          onCambio(false);
-        }}
-      >
-        Cerrar sesión
-      </button>
-    );
-  }
-
-  if (!abierto) {
-    return (
-      <button type="button" onClick={() => setAbierto(true)}>
-        Iniciar sesión
-      </button>
-    );
-  }
-
-  return (
-    <form
-      className="acceso"
-      onSubmit={async (evento) => {
-        evento.preventDefault();
-        try {
-          const { token } = await api.iniciarSesion(correo, clave);
-          fijarToken(token);
-          onCambio(true);
-          setAbierto(false);
-          setError(null);
-        } catch {
-          setError('Credenciales inválidas');
-        }
-      }}
-    >
-      <input
-        type="email"
-        value={correo}
-        onChange={(e) => setCorreo(e.target.value)}
-        placeholder="correo"
-        autoComplete="username"
-        required
-      />
-      <input
-        type="password"
-        value={clave}
-        onChange={(e) => setClave(e.target.value)}
-        placeholder="clave"
-        autoComplete="current-password"
-        required
-      />
-      <button type="submit">Entrar</button>
-      {error && <span className="error">{error}</span>}
-    </form>
-  );
-}

@@ -546,6 +546,50 @@ button.enlace {
   margin-top: 0.15rem;
 }
 
+/* Mosaicos que filtran. Como son botones, tienen que verse pulsables sin
+   parecer otra cosa: mismo tamaño y peso que los estáticos, con affordance al
+   pasar el puntero y estado activo evidente. */
+button.cifra {
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  min-height: auto;
+}
+
+.cifra.pulsable:hover {
+  border-color: var(--tinta-suave);
+  box-shadow: 0 2px 4px rgb(15 23 42 / 12%);
+}
+
+.cifra.pulsable:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.cifra.pulsable.activa {
+  background: var(--tinta);
+  border-color: var(--tinta);
+}
+
+.cifra.pulsable.activa .valor,
+.cifra.pulsable.activa .etiqueta {
+  color: #fff;
+}
+
+.barra-filtro {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--acento-claro);
+  border: 1px solid var(--acento);
+  border-radius: var(--radio);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+}
+
 .seccion-mapa {
   margin-bottom: 1.25rem;
 }
@@ -860,6 +904,368 @@ button.enlace {
   font-size: 0.9rem;
   min-height: 40px;
   max-width: 170px;
+}
+
+/* ----------------------------------------------------------------- campo */
+/*
+ * Pantalla de quien atiende. Se usa de pie, en movimiento, con una mano y con
+ * prisa: objetivos de toque grandes, la distancia en el lugar más visible de
+ * cada tarjeta, y nada que requiera leer con calma.
+ */
+
+.pagina-campo {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.acceso-amplio {
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--superficie);
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 1.25rem;
+  box-shadow: var(--sombra);
+  max-width: 340px;
+}
+
+.acceso-amplio h2 {
+  margin: 0 0 0.25rem;
+}
+
+.acceso-amplio input {
+  max-width: none;
+  width: 100%;
+}
+
+.barra-ubicacion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radio);
+  margin-bottom: 1rem;
+  font-size: 0.92rem;
+  border: 1px solid;
+}
+
+.barra-ubicacion.ok {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.barra-ubicacion.pendiente {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.barra-ubicacion small {
+  color: var(--tenue);
+}
+
+.aviso-accion {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radio);
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.seccion-campo {
+  margin-bottom: 1.75rem;
+}
+
+.cabecera-seccion {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.controles-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.grupo-orden {
+  display: flex;
+  gap: 0;
+}
+
+.grupo-orden button {
+  flex: 1;
+  border-radius: 0;
+  min-height: 46px;
+  font-weight: 500;
+}
+
+.grupo-orden button:first-child {
+  border-radius: var(--radio) 0 0 var(--radio);
+}
+
+.grupo-orden button:last-child {
+  border-radius: 0 var(--radio) var(--radio) 0;
+  border-left: none;
+}
+
+.grupo-orden button.activa {
+  background: var(--tinta);
+  color: #fff;
+  border-color: var(--tinta);
+}
+
+.casilla-compacta {
+  font-size: 0.9rem;
+}
+
+.lista-casos {
+  list-style: none;
+  padding: 0;
+  margin: 0.75rem 0 0;
+}
+
+.tarjeta-caso {
+  border: 1px solid var(--linea);
+  border-left: 5px solid var(--sev-desconocida);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--sombra);
+}
+
+.tarjeta-caso.severidad-critica { border-left-color: var(--sev-critica); }
+.tarjeta-caso.severidad-alta    { border-left-color: var(--sev-alta); }
+.tarjeta-caso.severidad-media   { border-left-color: var(--sev-media); }
+.tarjeta-caso.severidad-baja    { border-left-color: var(--sev-baja); }
+
+/* Los casos propios se distinguen del resto de un vistazo. */
+.tarjeta-caso.mio {
+  background: #f8fafc;
+  border-color: var(--info);
+}
+
+.cabecera-caso {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+}
+
+/* La distancia es el dato que decide si voy o no: va grande y primero. */
+.cabecera-caso .distancia {
+  flex: 0 0 auto;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--tinta);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  min-width: 72px;
+  text-align: center;
+}
+
+.titulo-caso {
+  min-width: 0;
+  flex: 1;
+}
+
+.titulo-caso strong {
+  display: block;
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.etiquetas-caso {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.marca-prioridad {
+  background: #e2e8f0;
+  color: var(--tinta);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+}
+
+.estado-caso {
+  color: var(--tenue);
+  font-variant: small-caps;
+}
+
+.personas-caso {
+  display: flex;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  font-size: 0.88rem;
+  color: var(--tenue);
+}
+
+.personas-caso .alarma {
+  color: var(--alarma);
+  font-weight: 700;
+}
+
+.personas-caso .aviso {
+  color: var(--aviso);
+  font-weight: 600;
+}
+
+.tarjeta-caso .descripcion {
+  margin: 0.5rem 0 0;
+}
+
+.contacto {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.contacto a {
+  color: var(--info);
+  font-weight: 600;
+}
+
+.tomado-por {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--aviso);
+  font-weight: 500;
+}
+
+.acciones-caso {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+}
+
+.acciones-caso button {
+  min-height: 46px;
+  padding: 0.5rem 0.9rem;
+}
+
+.acciones-caso button.principal {
+  background: var(--acento);
+  color: #fff;
+  border-color: var(--acento);
+  font-weight: 600;
+}
+
+.acciones-caso button.principal:hover:not(:disabled) {
+  background: #9a3412;
+}
+
+.acciones-caso button.enlace {
+  min-height: auto;
+}
+
+/* ---- Ruta y obstáculos ---- */
+
+.panel-ruta {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+}
+
+.resumen-ruta {
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.resumen-ruta .aviso {
+  color: var(--aviso);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* El bloque de obstáculos es la información que ningún mapa comercial tiene, y
+   la que puede evitar que alguien pierda veinte minutos. Va destacado. */
+.obstaculos {
+  margin-top: 0.6rem;
+  padding: 0.7rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.titulo-obstaculos {
+  display: block;
+  color: var(--alarma);
+  font-size: 0.95rem;
+  margin-bottom: 0.4rem;
+}
+
+.obstaculos ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+}
+
+.obstaculos li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #fecaca;
+}
+
+.obstaculos li:last-child {
+  border-bottom: none;
+}
+
+.marca-obstaculo {
+  font-weight: 700;
+  color: var(--alarma);
+}
+
+.sin-obstaculos {
+  margin: 0.6rem 0 0;
+  font-size: 0.88rem;
+  color: var(--bien);
+  font-weight: 500;
+}
+
+.enlace-externo {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--info);
+  font-weight: 600;
+}
+
+.formulario-cierre {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--linea);
+}
+
+.formulario-cierre label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 0.6rem;
+}
+
+.formulario-cierre input,
+.formulario-cierre textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.6rem;
+  font-family: inherit;
+  font-size: 1rem;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  min-height: 44px;
 }
 
 /* ------------------------------------------------------------ responsivo */

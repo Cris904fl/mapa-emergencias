@@ -1,5 +1,6 @@
 import { bd, enTransaccion, type Consultador } from '../db/pool.ts';
 import { ESTADOS_CERRADOS } from '../esquemas/dominio.ts';
+import { condicionDeFiltro, type NombreFiltro } from '../esquemas/filtros.ts';
 import type { CrearReporte } from '../esquemas/reporte.ts';
 import { conflicto, noEncontrado } from '../lib/errores.ts';
 
@@ -148,6 +149,7 @@ export async function listarReportesGeoJson(filtros: {
   estado?: string;
   categoria?: string;
   severidad?: string;
+  filtro?: NombreFiltro;
   incluir_cerrados: boolean;
   limite: number;
   desplazamiento: number;
@@ -155,8 +157,17 @@ export async function listarReportesGeoJson(filtros: {
   const condiciones: string[] = [];
   const parametros: unknown[] = [];
 
-  if (!filtros.incluir_cerrados) {
+  // El filtro por cifra del tablero puede exigir ver los cerrados (p. ej.
+  // "resueltos"), así que se resuelve antes de decidir si se excluyen.
+  const { condicion, incluyeCerrados } = condicionDeFiltro(filtros.filtro);
+
+  if (!filtros.incluir_cerrados && !incluyeCerrados) {
     condiciones.push(`r.estado NOT IN ${ESTADOS_CERRADOS_SQL}`);
+  }
+  if (condicion) {
+    // Cadena fija de esquemas/filtros.ts; lo que viene del usuario es el nombre
+    // del filtro, validado contra un enum.
+    condiciones.push(condicion);
   }
   if (filtros.estado) {
     parametros.push(filtros.estado);

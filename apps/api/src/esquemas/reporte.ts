@@ -8,6 +8,7 @@ import {
   zSeveridad,
   zTipoRecurso,
 } from './dominio.ts';
+import { zFiltro } from './filtros.ts';
 
 /**
  * Validación de entrada. Todo lo que llega del cliente pasa por acá antes de
@@ -98,6 +99,11 @@ export const zConsultarReportes = z.object({
   estado: zEstado.optional(),
   categoria: zCategoria.optional(),
   severidad: zSeveridad.optional(),
+  /**
+   * Filtro por cifra del tablero. Mismo nombre que el mosaico que se tocó, para
+   * que la lista y el mapa muestren exactamente lo que dice la cifra.
+   */
+  filtro: zFiltro.optional(),
   /** Por defecto solo lo que está sin cerrar, que es el caso de uso normal. */
   incluir_cerrados: z.coerce.boolean().default(false),
   limite: z.coerce.number().int().min(1).max(1000).default(200),
