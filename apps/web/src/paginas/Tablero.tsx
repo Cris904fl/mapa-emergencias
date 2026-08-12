@@ -6,10 +6,13 @@ import {
   type ColeccionGeoJson,
   type Conglomerado,
   type NombreFiltro,
+  type PersonalCampo,
+  type Severidad,
   type ReporteCola,
   type Resumen,
   type Zona,
 } from '../lib/api.ts';
+import { TIBIA_S, describirAntiguedad } from '../lib/frescura.ts';
 
 /**
  * Tablero de la sala de crisis.
@@ -55,6 +58,8 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
   const [expandido, setExpandido] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [personal, setPersonal] = useState<PersonalCampo[] | null>(null);
+  const [avisoPersonal, setAvisoPersonal] = useState<string | null>(null);
 
   /**
    * Filtro activo, elegido tocando una cifra de cabecera. Se aplica a la lista y
@@ -64,14 +69,24 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
   const [filtro, setFiltro] = useState<NombreFiltro | null>(null);
   const [etiquetaFiltro, setEtiquetaFiltro] = useState<string | null>(null);
 
+  /**
+   * Severidad activa, elegida tocando la leyenda del mapa.
+   *
+   * Es ortogonal al filtro de KPI y se combina con él: «qué tan grave» y «en qué
+   * situación está» son preguntas distintas. Va al mismo sitio que el otro
+   * filtro —la cola y el GeoJSON del mapa— porque si solo filtrara el mapa, la
+   * lista de al lado mostraría reportes que el mapa no dibuja.
+   */
+  const [severidad, setSeveridad] = useState<Severidad | null>(null);
+
   const cargar = useCallback(async () => {
     try {
       const [r, c, g, z, rg, recg] = await Promise.all([
         api.resumen(),
-        api.cola(50, false, filtro ?? undefined),
+        api.cola(50, false, filtro ?? undefined, severidad ?? undefined),
         api.conglomerados(300),
         api.zonas(),
-        api.reportesGeoJson(filtro ?? undefined),
+        api.reportesGeoJson(filtro ?? undefined, severidad ?? undefined),
         api.recursosGeoJson(),
       ]);
       setResumen(r);
@@ -91,13 +106,48 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
     } finally {
       setCargando(false);
     }
-  }, [filtro]);
+  }, [filtro, severidad]);
+
+  /**
+   * El personal se pide aparte del resto del tablero, no dentro del mismo
+   * `Promise.all`.
+   *
+   * Es la única consulta de esta pantalla que exige sesión operativa —toda la
+   * sección /v1/campo lo hace—, y un token vencido no puede tumbar el resto: el
+   * tablero se mira en modo consulta a propósito. Si falla, se dice por qué en
+   * vez de dejar la capa vacía sin explicación, que se leería como «no hay
+   * nadie en campo».
+   */
+  const cargarPersonal = useCallback(async () => {
+    if (!tieneSesion()) {
+      setPersonal(null);
+      setAvisoPersonal(null);
+      return;
+    }
+
+    try {
+      const { personal: gente } = await api.personalEnCampo();
+      setPersonal(gente);
+      setAvisoPersonal(null);
+    } catch (problema) {
+      setPersonal(null);
+      setAvisoPersonal(
+        problema instanceof ErrorApi && (problema.estado === 401 || problema.estado === 403)
+          ? 'La sesión venció: el personal en campo dejó de mostrarse.'
+          : 'No se pudo leer la posición del personal.',
+      );
+    }
+  }, []);
 
   useEffect(() => {
     void cargar();
-    const temporizador = window.setInterval(() => void cargar(), INTERVALO_REFRESCO_MS);
+    void cargarPersonal();
+    const temporizador = window.setInterval(() => {
+      void cargar();
+      void cargarPersonal();
+    }, INTERVALO_REFRESCO_MS);
     return () => window.clearInterval(temporizador);
-  }, [cargar]);
+  }, [cargar, cargarPersonal]);
 
   return (
     <div className="pagina-tablero">
@@ -142,12 +192,26 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
         />
       )}
 
-      {filtro && (
+      {/* Los dos filtros se anuncian juntos y se quitan por separado: con ambos
+          activos, un «quitar filtro» único dejaría al operador sin saber cuál de
+          los dos estaba recortando la lista. */}
+      {(filtro || severidad) && (
         <div className="barra-filtro" role="status">
-          Mostrando solo reportes <strong>{etiquetaFiltro ?? filtro}</strong> ({cola.length})
-          <button type="button" className="enlace" onClick={() => setFiltro(null)}>
-            quitar filtro
-          </button>
+          Mostrando solo reportes{' '}
+          {filtro && <strong>{etiquetaFiltro ?? filtro}</strong>}
+          {filtro && severidad && ' y '}
+          {severidad && <strong>de severidad {severidad.toLowerCase()}</strong>}{' '}
+          ({cola.length})
+          {filtro && (
+            <button type="button" className="enlace" onClick={() => setFiltro(null)}>
+              quitar {severidad ? 'el de KPI' : 'filtro'}
+            </button>
+          )}
+          {severidad && (
+            <button type="button" className="enlace" onClick={() => setSeveridad(null)}>
+              quitar {filtro ? 'el de severidad' : 'filtro'}
+            </button>
+          )}
         </div>
       )}
 
@@ -155,8 +219,18 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
         {/* El marcador ocupa el mismo alto que el mapa para que la cola de
             atención no salte hacia arriba y vuelva a bajar mientras carga. */}
         <Suspense fallback={<div className="mapa-cargando">Cargando el mapa…</div>}>
-          <Mapa reportes={reportesGeo} recursos={recursosGeo} onSeleccionar={setExpandido} />
+          <Mapa
+            reportes={reportesGeo}
+            recursos={recursosGeo}
+            personal={personal}
+            onSeleccionar={setExpandido}
+            severidad={severidad}
+            onFiltrarSeveridad={(elegida) =>
+              setSeveridad(elegida === severidad ? null : elegida)
+            }
+          />
         </Suspense>
+        <ResumenPersonal personal={personal} aviso={avisoPersonal} autenticado={autenticado} />
       </section>
 
       <div className="rejilla-paneles">
@@ -243,6 +317,78 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
   );
 }
 
+/**
+ * Quién está en campo, debajo del mapa.
+ *
+ * El mapa dice dónde; esta tira dice quién y con cuánta carga, que es lo que
+ * decide a quién se le manda el siguiente caso. Cada entrada lleva la edad de
+ * su posición al lado del nombre: sin eso, una fila que dice «0 casos» invita a
+ * mandarle trabajo a alguien de quien no se sabe nada desde hace una hora.
+ */
+function ResumenPersonal({
+  personal,
+  aviso,
+  autenticado,
+}: {
+  personal: PersonalCampo[] | null;
+  aviso: string | null;
+  autenticado: boolean;
+}) {
+  // Sin sesión no se consulta: el aviso de «modo consulta» ya explica por qué y
+  // repetirlo acá sería ruido.
+  if (!autenticado) return null;
+
+  if (aviso) {
+    return (
+      <p className="tira-personal-aviso" role="status">
+        {aviso}
+      </p>
+    );
+  }
+
+  if (!personal) return null;
+
+  if (personal.length === 0) {
+    return (
+      <p className="tira-personal-aviso">
+        Nadie ha reportado posición todavía. Se registra sola cuando alguien abre «Atender».
+      </p>
+    );
+  }
+
+  const desactualizados = personal.filter((persona) => persona.antiguedad_s >= TIBIA_S).length;
+
+  return (
+    <div className="tira-personal">
+      <p className="cabecera-personal">
+        <strong>{personal.length}</strong> en campo
+        {desactualizados > 0 && (
+          <span className="tenue">
+            {' '}
+            · {desactualizados} con posición desactualizada
+          </span>
+        )}
+      </p>
+      <ul className="lista-personal">
+        {personal.map((persona) => (
+          <li
+            key={persona.id}
+            className={persona.antiguedad_s >= TIBIA_S ? 'persona vieja' : 'persona'}
+          >
+            <span className="nombre-persona">{persona.nombre}</span>
+            <span className="tenue">
+              {persona.casos_abiertos === 1
+                ? '1 caso'
+                : `${persona.casos_abiertos} casos`}{' '}
+              · {describirAntiguedad(persona.antiguedad_s)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Cifras({
   resumen,
   filtroActivo,
@@ -288,6 +434,18 @@ function Cifras({
         {...{ filtroActivo, onFiltrar }}
       />
       <Cifra valor={r.sin_triage} etiqueta="sin triage" filtro="sin_triage" {...{ filtroActivo, onFiltrar }} />
+      {/* Casos que alguien tomó y a los que nunca llegó. Es la única cifra que
+          señala algo que el resto del tablero no puede mostrar: al asignarse, un
+          reporte deja de subir en la cola, así que uno olvidado se ve igual que
+          uno atendido. Sin este mosaico, nadie lo mira. */}
+      <Cifra
+        valor={r.asignados_estancados}
+        etiqueta="asignados sin llegada"
+        tono={r.asignados_estancados > 0 ? 'alarma' : 'normal'}
+        filtro="estancados"
+        titulo="Tomados hace más de 30 minutos y todavía sin llegada al sitio"
+        {...{ filtroActivo, onFiltrar }}
+      />
       <Cifra
         valor={r.con_rescate_pendiente}
         etiqueta="rescate pendiente"

@@ -75,9 +75,6 @@ entidades, ni datos reales de DIVIPOLA.
   contra un servicio real; no se midió su calidad con este prompt.
 - **Proveedor `anthropic`.** Escrito y tipado contra el SDK instalado; nunca
   ejecutado (no hubo clave).
-- **`GET /v1/campo/personal`.** Endpoint implementado y funcionando, **sin ningún
-  consumidor**: el tablero no muestra dónde está el personal. Hoy es código
-  muerto.
 - **Background Sync del service worker.** El código existe. Se verificó la
   sincronización al recargar la página; ⚠️ **no se verificó el caso de pestaña
   cerrada**, que es el único que Background Sync aporta de más.
@@ -90,9 +87,9 @@ entidades, ni datos reales de DIVIPOLA.
   prueba).
 - Proveedor propio de teselas (hoy: OpenStreetMap, cuya política **no permite
   producción**).
-- Partición del bundle de la PWA (ver §9 y §11).
-- Seguimiento de asignaciones estancadas (un caso `ASIGNADO` al que nadie llegó no
-  vuelve a subir en la cola).
+- Término propio en el índice para las asignaciones estancadas. Hoy hay alerta
+  (mosaico «asignados sin llegada»), pero el reporte sigue sin volver a subir en
+  la cola: eso exige repartir de nuevo los cinco pesos y volver a medir.
 - Modo sin Redis para despliegue gratuito: la ruta
   `POST /v1/mantenimiento/refrescar-prioridades` existe, pero la extracción por IA
   en ese modo queda solo a demanda.
@@ -469,7 +466,7 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | POST | `/v1/campo/casos/:id/liberar` | lo deja disponible |
 | POST | `/v1/campo/casos/:id/en-atencion` | llegó al sitio |
 | POST | `/v1/campo/casos/:id/resolver` | cierra. `{nota, personas_atendidas}`. Solo quien lo tomó |
-| GET | `/v1/campo/personal` | personal con posición conocida + antigüedad del dato. 🟡 **sin consumidor** |
+| GET | `/v1/campo/personal` | personal con posición conocida + antigüedad del dato. Lo dibuja el mapa del tablero |
 
 ### Transversal
 
@@ -501,7 +498,9 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | Pesos versionados y editables por SQL | ✅ |
 | Refresco periódico de prioridades | ✅ verificado |
 | Cola priorizada en el tablero | ✅ |
-| Filtros por KPI (10 mosaicos, lista + mapa a la vez) | ✅ con prueba de correspondencia |
+| Filtros por KPI (11 mosaicos, lista + mapa a la vez) | ✅ con prueba de correspondencia |
+| Filtro por severidad desde la leyenda, ortogonal al de KPI | ✅ 2 pruebas |
+| Alerta de asignaciones estancadas | ✅ 2 pruebas |
 | Conglomerados por densidad (DBSCAN) | ✅ |
 | Consolidado por zonas | ✅ |
 | Reportes aislados | ✅ |
@@ -514,7 +513,7 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | Tomar / liberar / en atención / resolver | ✅ 17 pruebas |
 | Candado de concurrencia al tomar | ✅ con prueba de dos usuarios |
 | Bitácora con actor y nota | ✅ |
-| Posición del personal en campo | ✅ escritura / 🟡 lectura sin UI |
+| Posición del personal en campo | ✅ escritura y lectura, con antigüedad en 3 franjas |
 | Extracción de texto libre (Ollama) | ✅ medida |
 | 6 candados sobre lo que la IA puede escribir | ✅ 11 pruebas |
 | Etiquetado de fotos | 🟡 sin ejecutar |
@@ -633,17 +632,12 @@ suben de major por separado.
 
 ### Deuda técnica con impacto real
 
-1. **El bundle de la PWA es un solo trozo de 1 303 kB (364 kB gzip).** Casi todo
-   es MapLibre (1.1 MB sin minificar), que la vista **Reportar** —la del
-   ciudadano— no usa. En la red degradada que justifica todo el diseño
-   offline-first, eso son decenas de segundos antes de poder llenar un formulario.
-   **Es el defecto más grave del camino principal.**
-2. **`GET /v1/campo/personal` no tiene consumidor.** Código muerto: o se muestra
-   en el tablero o se quita.
-3. **Asignaciones estancadas.** Un caso `ASIGNADO` al que el equipo nunca llegó no
-   vuelve a subir en la cola, porque el término de espera se apaga con la primera
-   respuesta. Necesita su propio término o alerta; documentado en
-   `prioridad.md`.
+Ninguna abierta. La última —asignaciones estancadas— se cerró con una alerta:
+mosaico «asignados sin llegada» y filtro `estancados`. Queda la mitad de fondo,
+degradada a pendiente y no a deuda: el reporte estancado **sigue sin volver a
+subir en la cola**, porque eso exige un sexto término del índice y repartir de
+nuevo los cinco pesos. Con la alerta, el caso deja de ser invisible; sin el
+término, sigue dependiendo de que alguien mire. Razonamiento en `prioridad.md`.
 
 ### Limitaciones aceptadas (documentadas)
 
@@ -736,32 +730,34 @@ duplicado en el tablero.
 
 ## 11. SIGUIENTE PASO
 
-**Partir el bundle de la PWA para que la vista «Reportar» no cargue MapLibre.**
+**Calibrar el umbral de «asignados sin llegada» con tiempos reales, y decidir si
+merece un término propio en el índice.**
 
-Por qué esto y no otra cosa: el ciudadano en red degradada es el usuario
-principal y el caso de uso que justifica toda la arquitectura offline-first. Hoy
-descarga **364 kB comprimidos** antes de poder escribir una línea, y la mayor
-parte es una librería de mapas que su pantalla no usa. Es el único defecto que
-contradice la premisa central del proyecto.
+La deuda técnica con impacto real quedó en cero: el bundle está partido (entrada
+de **1 303 kB a 243 kB**, 76 kB gzip), `GET /v1/campo/personal` dibuja al personal
+con la antigüedad de su posición, y las asignaciones estancadas ya tienen alerta.
 
-Cómo, concretamente:
+Lo que queda de esa última es la mitad de fondo. Hoy el mosaico avisa, pero el
+reporte estancado **sigue sin volver a subir en la cola**: depende de que un
+operador mire el tablero. Y el umbral de 30 minutos se eligió a ojo — muy corto
+inunda el mosaico en una ciudad con tráfico, muy largo lo vuelve inútil.
 
-1. En `apps/web/src/paginas/Tablero.tsx`, cargar el mapa con
-   `React.lazy(() => import('../componentes/Mapa.tsx'))` y envolverlo en
-   `<Suspense>` con un marcador de posición.
-2. `apps/web/src/componentes/Mapa.tsx` importa `maplibre-gl` y su CSS; al quedar
-   detrás de un `import()` dinámico, Rollup lo saca a su propio trozo.
-3. Verificar con `npx vite build` que aparecen al menos dos entradas en
-   `dist/assets/` y que el trozo de entrada baja de ~100 kB gzip.
-4. Confirmar en el navegador que el tablero sigue funcionando (el mapa tarda un
-   instante más en aparecer) y que `?vista=reportar` ya no pide el trozo del mapa
-   — se ve en `read_network_requests`.
+Cómo, en orden:
 
-**Segundo paso, inmediatamente después:** decidir qué hacer con
-`GET /v1/campo/personal`. O se dibuja el personal en el mapa del tablero (el
-endpoint ya devuelve `lat`, `lng`, `antiguedad_s` y `casos_abiertos`, y hay que
-mostrar la antigüedad porque una posición de hace dos horas es engañosa), o se
-elimina el endpoint. Dejarlo como está es código muerto.
+1. **Medir.** Con la bitácora ya se puede: `historial_estado_reporte` tiene el
+   paso a `ASIGNADO` y el paso a `EN_ATENCION`, así que la distribución real de
+   tiempos de llegada es una consulta, no un desarrollo. Sin ese número, elegir
+   umbral o peso es adivinar.
+2. **Ajustar el umbral** en `filtros.ts` con lo que salga. Si la mediana de
+   llegada resulta ser de 50 minutos, el mosaico actual está mintiendo.
+3. **Decidir el sexto término** (`tiempo_desde_asignacion`) con el dato en la
+   mano. Exige una fila nueva en `pesos_prioridad` con los cinco pesos
+   repartidos de nuevo para que sigan sumando 100, y volver a medir el orden
+   resultante — es el invariante más delicado del sistema, y por eso no se tocó
+   sin datos.
+
+**Alternativa si se prefiere algo más visible antes:** el etiquetado de fotos
+sigue sin ejecutarse nunca y solo necesita `ollama pull gemma3:4b`.
 
 ---
 
@@ -903,24 +899,33 @@ llena con un toque.
 
 **Estado actual en una frase.** MVP funcional de punta a punta —reporte ciudadano
 offline-first, priorización auditable, triage con IA local, atención en campo con
-ruta y obstáculos, tablero con filtros— con 59 pruebas pasando y 4 commits en
-`origin/main`.
+ruta y obstáculos, tablero con filtros cruzables— con **62 pruebas** pasando, 4
+commits en `origin/main` y tres cambios sin commit en el árbol de trabajo.
 
-**Último cambio realizado.** Commit `efa74d8`: pantalla de login rediseñada
-(etiquetas visibles, mostrar/ocultar clave, panel de cuentas demo solo en
-desarrollo) y sesión iniciable **únicamente** desde la vista «Atender»; el tablero
-quedó en modo consulta con un aviso que remite allá.
+**Último cambio realizado.** Tres cambios sin commit todavía:
 
-**Próxima tarea exacta.** Partir el bundle de la PWA: cargar
-`componentes/Mapa.tsx` con `React.lazy` + `<Suspense>` desde
-`paginas/Tablero.tsx`, para que la vista «Reportar» deje de descargar MapLibre.
-Hoy el bundle es un solo trozo de **1 303 kB (364 kB gzip)**. Verificar con
-`npx vite build` que se generan trozos separados y con `read_network_requests`
-que `?vista=reportar` no pide el del mapa.
+1. **Partición del bundle.** `componentes/Mapa.tsx` se carga con `React.lazy` +
+   `<Suspense>` desde `paginas/Tablero.tsx`. La entrada pasó de **1 303 kB
+   (364 kB gzip)** a **243 kB (76 kB gzip)**; el CSS se partió solo también. La
+   vista «Reportar» ya no descarga MapLibre — verificado por `performance`.
+2. **El personal se dibuja en el tablero.** `GET /v1/campo/personal` dejó de ser
+   código muerto: capa propia en el mapa (anillo con núcleo blanco) más una tira
+   bajo el mapa con nombre, casos abiertos y edad de la posición. Tres franjas de
+   frescura en `lib/frescura.ts`, compartidas por mapa, leyenda y tira.
+3. **Alerta de estancados y filtro por severidad.** Mosaico «asignados sin
+   llegada» con filtro `estancados`, y la leyenda del mapa convertida en control
+   de severidad. La severidad es ortogonal al filtro de KPI, se cruza con AND, y
+   va a la cola **y** al GeoJSON del mapa (`GET /v1/tablero/cola` no aceptaba
+   `severidad`; ahora sí).
+
+**Próxima tarea exacta.** Medir los tiempos reales de llegada con la bitácora,
+ajustar el umbral de 30 minutos y decidir si las asignaciones estancadas merecen
+un sexto término del índice — ver §11.
 
 **Archivos relevantes para esa tarea.**
-`apps/web/src/paginas/Tablero.tsx` · `apps/web/src/componentes/Mapa.tsx` ·
-`apps/web/vite.config.ts`
+`apps/api/src/esquemas/filtros.ts` (el umbral) ·
+`db/migrations/005_prioridad.sql` (la fórmula, si se llega al término propio) ·
+`docs/prioridad.md`
 
 **Bloqueos actuales.** Ninguno técnico. Dos cosas requieren decisión o insumo de
 Cristian, no de quien programa:

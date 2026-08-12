@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { type Map as MapaLibre } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { ColeccionGeoJson } from '../lib/api.ts';
+import type { ColeccionGeoJson, PersonalCampo, Severidad } from '../lib/api.ts';
+import { FRESCA_S, TIBIA_S, describirAntiguedad } from '../lib/frescura.ts';
 
 /**
  * Mapa del tablero.
@@ -37,13 +38,82 @@ const COLOR_POR_SEVERIDAD: Record<string, string> = {
   DESCONOCIDA: '#64748b',
 };
 
+// Color del personal de socorro. Se eligió un tono que no aparece en la escala
+// de severidad ni en los recursos: en un mapa donde el color ya significa «qué
+// tan grave», un punto que significa «quién» no puede parecerse a ninguno.
+const COLOR_PERSONAL = '#0d9488';
+
 type Props = {
   reportes: ColeccionGeoJson | null;
   recursos: ColeccionGeoJson | null;
+  personal?: PersonalCampo[] | null;
   onSeleccionar?: (id: string) => void;
+  /** Severidad activa, para marcar cuál entrada de la leyenda está pulsada. */
+  severidad?: Severidad | null;
+  /** Si se pasa, las entradas de severidad de la leyenda se vuelven botones. */
+  onFiltrarSeveridad?: (severidad: Severidad) => void;
 };
 
-export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
+/**
+ * Opacidad escalonada por antigüedad, compartida por el punto y su núcleo.
+ *
+ * Se escalona en vez de interpolar a propósito: tres franjas nítidas —actual,
+ * envejeciendo, desactualizada— se leen de un vistazo, mientras que un
+ * degradado continuo obliga a comparar dos puntos entre sí para saber cuál es
+ * más viejo. Lo tenue se lee como «no cuente con esto» sin abrir nada.
+ */
+const OPACIDAD_POR_ANTIGUEDAD: maplibregl.ExpressionSpecification = [
+  'step',
+  ['coalesce', ['get', 'antiguedad_s'], 0],
+  0.95,
+  FRESCA_S,
+  0.55,
+  TIBIA_S,
+  0.22,
+];
+
+/**
+ * El personal llega como lista plana; el mapa necesita GeoJSON.
+ *
+ * La forma se declara acá en vez de tomarla de `@types/geojson`: ese paquete
+ * entra de refilón con maplibre-gl y no está en las dependencias de este
+ * paquete. Es la misma decisión que ya tomó `ColeccionGeoJson` en `api.ts`.
+ */
+type ColeccionPersonal = {
+  type: 'FeatureCollection';
+  features: {
+    type: 'Feature';
+    geometry: { type: 'Point'; coordinates: [number, number] };
+    properties: Record<string, unknown>;
+  }[];
+};
+
+function personalAGeoJson(personal: PersonalCampo[]): ColeccionPersonal {
+  return {
+    type: 'FeatureCollection',
+    features: personal.map((persona) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [persona.lng, persona.lat] },
+      properties: {
+        nombre: persona.nombre,
+        rol: persona.rol,
+        organizacion: persona.organizacion,
+        antiguedad_s: persona.antiguedad_s,
+        precision_m: persona.posicion_precision_m,
+        casos_abiertos: persona.casos_abiertos,
+      },
+    })),
+  };
+}
+
+export function Mapa({
+  reportes,
+  recursos,
+  personal,
+  onSeleccionar,
+  severidad,
+  onFiltrarSeveridad,
+}: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaLibre | null>(null);
   const listo = useRef(false);
@@ -68,6 +138,10 @@ export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
         data: { type: 'FeatureCollection', features: [] },
       });
       instancia.addSource('recursos', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      instancia.addSource('personal', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       });
@@ -154,6 +228,36 @@ export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
         },
       });
 
+      // El personal va encima de todo: es la capa que se consulta para decidir a
+      // quién mandar, y un punto de persona tapado por un halo de reporte no
+      // sirve. Se dibuja como anillo —relleno con núcleo blanco— para que no se
+      // confunda con los discos llenos de reportes y recursos ni siquiera en
+      // escala de grises.
+      instancia.addLayer({
+        id: 'personal-punto',
+        type: 'circle',
+        source: 'personal',
+        paint: {
+          'circle-radius': 9,
+          'circle-color': COLOR_PERSONAL,
+          'circle-opacity': OPACIDAD_POR_ANTIGUEDAD,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-opacity': OPACIDAD_POR_ANTIGUEDAD,
+        },
+      });
+
+      instancia.addLayer({
+        id: 'personal-nucleo',
+        type: 'circle',
+        source: 'personal',
+        paint: {
+          'circle-radius': 3.5,
+          'circle-color': '#ffffff',
+          'circle-opacity': OPACIDAD_POR_ANTIGUEDAD,
+        },
+      });
+
       const emergente = new maplibregl.Popup({ closeButton: true, maxWidth: '280px' });
 
       instancia.on('click', 'reportes-punto', (evento) => {
@@ -196,7 +300,31 @@ export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
           .addTo(instancia);
       });
 
-      for (const capa of ['reportes-punto', 'recursos-punto']) {
+      instancia.on('click', 'personal-punto', (evento) => {
+        const rasgo = evento.features?.[0];
+        if (!rasgo) return;
+        const p = rasgo.properties as Record<string, unknown>;
+        const antiguedad = Number(p.antiguedad_s ?? 0);
+        const casos = Number(p.casos_abiertos ?? 0);
+
+        // La antigüedad se dice siempre y de primera, incluso cuando es de hace
+        // segundos: si solo apareciera al envejecer, su ausencia se leería como
+        // «está aquí» en vez de como «no se sabe».
+        emergente
+          .setLngLat(evento.lngLat)
+          .setHTML(
+            `<strong>${escapar(String(p.nombre ?? ''))}</strong><br>` +
+              `${escapar(String(p.rol ?? '').toLowerCase())}` +
+              (p.organizacion ? ` · ${escapar(String(p.organizacion))}` : '') +
+              `<br>Posición ${describirAntiguedad(antiguedad)}` +
+              (antiguedad >= TIBIA_S ? ' <strong>(desactualizada)</strong>' : '') +
+              (p.precision_m ? `<br>Precisión: ±${Number(p.precision_m)} m` : '') +
+              `<br>Casos abiertos: ${casos}`,
+          )
+          .addTo(instancia);
+      });
+
+      for (const capa of ['reportes-punto', 'recursos-punto', 'personal-punto']) {
         instancia.on('mouseenter', capa, () => {
           instancia.getCanvas().style.cursor = 'pointer';
         });
@@ -245,17 +373,67 @@ export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
     else instancia.once('load', aplicar);
   }, [recursos]);
 
+  useEffect(() => {
+    const instancia = mapa.current;
+    if (!instancia) return;
+
+    // A diferencia de reportes y recursos, acá sí se aplica el caso nulo: sin
+    // sesión no se consulta el personal, y la capa tiene que quedar vacía en vez
+    // de conservar las últimas posiciones conocidas al cerrar sesión.
+    const coleccion = personalAGeoJson(personal ?? []);
+
+    const aplicar = () => {
+      const fuente = instancia.getSource('personal') as maplibregl.GeoJSONSource | undefined;
+      fuente?.setData(coleccion as never);
+    };
+
+    if (listo.current) aplicar();
+    else instancia.once('load', aplicar);
+  }, [personal]);
+
   return (
     <div className="envoltorio-mapa">
       <div ref={contenedor} className="mapa" />
       <div className="leyenda">
         <span className="titulo-leyenda">Severidad</span>
-        {Object.entries(COLOR_POR_SEVERIDAD).map(([severidad, color]) => (
-          <span key={severidad} className="entrada-leyenda">
-            <i style={{ background: color }} aria-hidden="true" />
-            {severidad.toLowerCase()}
-          </span>
-        ))}
+        {/* La leyenda hace doble oficio: explica el color y filtra por él. Es
+            donde el operador ya está mirando cuando se pregunta «y si solo veo
+            las críticas», así que poner el control en otra parte de la pantalla
+            sería mandarlo a buscar. Sin `onFiltrarSeveridad` se dibuja como
+            texto y no como botón: un control que parece pulsable y no hace nada
+            es peor que uno que no lo parece. */}
+        {Object.entries(COLOR_POR_SEVERIDAD).map(([nombre, color]) => {
+          const muestra = <i style={{ background: color }} aria-hidden="true" />;
+
+          if (!onFiltrarSeveridad) {
+            return (
+              <span key={nombre} className="entrada-leyenda">
+                {muestra}
+                {nombre.toLowerCase()}
+              </span>
+            );
+          }
+
+          const activa = severidad === nombre;
+
+          return (
+            <button
+              key={nombre}
+              type="button"
+              className={`entrada-leyenda pulsable ${activa ? 'activa' : ''}`}
+              onClick={() => onFiltrarSeveridad(nombre as Severidad)}
+              aria-pressed={activa}
+              title={
+                activa
+                  ? 'Quitar el filtro de severidad'
+                  : `Ver solo los reportes de severidad ${nombre.toLowerCase()}`
+              }
+            >
+              {muestra}
+              {nombre.toLowerCase()}
+            </button>
+          );
+        })}
         <span className="entrada-leyenda">
           <i className="anillo-rescate" aria-hidden="true" />
           requiere rescate
@@ -264,6 +442,20 @@ export function Mapa({ reportes, recursos, onSeleccionar }: Props) {
           <i style={{ background: '#0369a1' }} aria-hidden="true" />
           recurso disponible
         </span>
+        {/* Solo se anuncia el personal cuando hay alguno: una entrada de leyenda
+            para una capa vacía hace buscar en el mapa algo que no está. */}
+        {personal && personal.length > 0 && (
+          <>
+            <span className="entrada-leyenda">
+              <i className="punto-personal" aria-hidden="true" />
+              personal en campo
+            </span>
+            <span className="entrada-leyenda">
+              <i className="punto-personal desvanecido" aria-hidden="true" />
+              posición vieja
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

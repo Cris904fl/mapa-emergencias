@@ -456,6 +456,68 @@ describe('filtros del tablero', () => {
     // mosaico suma PERSONAS. Son unidades distintas a propósito.
     assert.equal(await cuenta('atrapadas'), 1);
     assert.equal(await cuenta('sin_responsable'), 3);
+    // El mosaico de estancados sale de la misma condición que responde la cola.
+    assert.equal(await cuenta('estancados'), resumen.reportes.asignados_estancados);
+  });
+
+  it('un asignado recién tomado no cuenta como estancado, uno viejo sí', async () => {
+    // Es el defecto que este filtro existe para hacer visible: al pasar a
+    // ASIGNADO se apaga el término de espera y el reporte deja de subir en la
+    // cola, así que un caso olvidado se ve igual que uno atendido.
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/tomar`,
+      headers: conToken(tokenA),
+    });
+
+    const estancados = async () =>
+      (await app.inject({ method: 'GET', url: '/v1/tablero/cola?filtro=estancados' })).json()
+        .total as number;
+
+    assert.equal(await estancados(), 0, 'recién tomado no está estancado');
+
+    // Se envejece la marca de primera respuesta en vez de esperar 30 minutos.
+    await bd.consultar(
+      `UPDATE reportes SET primera_respuesta_en = now() - interval '31 minutes' WHERE id = $1`,
+      [reporte],
+    );
+
+    assert.equal(await estancados(), 1, 'a los 31 minutos sin llegar sí lo está');
+
+    // Llegar al sitio lo saca de la cifra: es lo que el mosaico está esperando.
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/en-atencion`,
+      headers: conToken(tokenA),
+    });
+
+    assert.equal(await estancados(), 0, 'llegar al sitio lo saca');
+  });
+
+  it('la severidad filtra la cola, y se combina con el filtro de KPI', async () => {
+    // El mapa ya filtraba por severidad y la cola no. Si se separan, el mapa
+    // muestra tres puntos y la lista de al lado veinte.
+    await crearReporteDirecto({ ...POSICION, severidad: 'CRITICA', atrapadas: 2 });
+    await crearReporteDirecto({ ...POSICION, severidad: 'CRITICA' });
+    await crearReporteDirecto({ ...POSICION, severidad: 'BAJA', atrapadas: 1 });
+
+    const total = async (consulta: string) =>
+      (await app.inject({ method: 'GET', url: `/v1/tablero/cola?${consulta}` })).json()
+        .total as number;
+
+    assert.equal(await total('severidad=CRITICA'), 2);
+    assert.equal(await total('severidad=BAJA'), 1);
+    // Los dos filtros se cruzan con AND: de los críticos, el que tiene atrapadas.
+    assert.equal(await total('severidad=CRITICA&filtro=atrapadas'), 1);
+  });
+
+  it('rechaza una severidad que no existe', async () => {
+    const respuesta = await app.inject({
+      method: 'GET',
+      url: '/v1/tablero/cola?severidad=GRAVISIMA',
+    });
+    assert.equal(respuesta.statusCode, 400);
   });
 
   it('rechaza un filtro que no existe', async () => {

@@ -657,9 +657,101 @@ button.cifra {
   border: 1px solid rgb(255 255 255 / 80%);
 }
 
+/* La leyenda también filtra. Se le quita la apariencia de botón —heredaría el
+   fondo y el borde del navegador y rompería la tarjeta— pero se le deja el
+   cursor y un estado pulsado bien visible, porque de eso depende que se note
+   que hay un filtro activo. */
+button.entrada-leyenda {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.1rem 0.25rem;
+  margin: 0 -0.25rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button.entrada-leyenda:hover {
+  background: rgb(15 23 42 / 7%);
+}
+
+button.entrada-leyenda.activa {
+  background: var(--acento-claro);
+  box-shadow: inset 0 0 0 1.5px var(--acento);
+  font-weight: 600;
+}
+
+button.entrada-leyenda:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
 .entrada-leyenda i.anillo-rescate {
   background: transparent;
   border: 2px solid #111827;
+}
+
+/* Repite el anillo con núcleo blanco que el mapa dibuja para el personal: la
+   leyenda solo sirve si la muestra es igual al punto que hay que reconocer. */
+.entrada-leyenda i.punto-personal {
+  background: #0d9488;
+  box-shadow: inset 0 0 0 2.5px #ffffff;
+  border: 1px solid #0d9488;
+}
+
+.entrada-leyenda i.punto-personal.desvanecido {
+  opacity: 0.22;
+}
+
+/* ---------------------------------------------------- personal bajo el mapa */
+
+.tira-personal {
+  margin-top: 0.6rem;
+}
+
+.tira-personal-aviso {
+  margin-top: 0.6rem;
+  color: var(--tenue);
+  font-size: 0.88rem;
+}
+
+.cabecera-personal {
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+}
+
+.lista-personal {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.lista-personal .persona {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  border: 1px solid var(--linea);
+  border-left: 3px solid #0d9488;
+  border-radius: 8px;
+  padding: 0.35rem 0.6rem;
+  background: var(--superficie);
+  font-size: 0.85rem;
+}
+
+/* La misma señal que en el mapa: lo desvanecido es lo que no se debe usar para
+   decidir. El borde pasa a gris para que no dependa solo de la opacidad. */
+.lista-personal .persona.vieja {
+  border-left-color: var(--tenue);
+  opacity: 0.6;
+}
+
+.nombre-persona {
+  font-weight: 600;
 }
 
 .rejilla-paneles {

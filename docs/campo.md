@@ -182,6 +182,45 @@ emergencia es casi inútil, y presentarla como actual sería peor que no tenerla
 `GET /v1/campo/personal` devuelve la antigüedad del dato en segundos para que
 quien consulte pueda juzgar.
 
+### Cómo se muestra en el tablero
+
+El mapa dibuja al personal como un anillo con núcleo blanco, en un color que no
+aparece ni en la escala de severidad ni en los recursos: en un mapa donde el
+color ya significa «qué tan grave», el punto que significa «quién» no puede
+parecerse a ninguno. Debajo del mapa va una tira con el nombre, los casos
+abiertos y la edad de la posición de cada uno — el mapa dice *dónde*, la tira
+dice *quién y con cuánta carga*, que es lo que decide a quién se le manda el
+siguiente caso.
+
+La antigüedad se pinta en tres franjas escalonadas (`lib/frescura.ts`):
+
+| Franja | Antigüedad | Cómo se ve |
+|---|---|---|
+| actual | < 5 min | opacidad plena |
+| envejeciendo | 5–30 min | atenuada |
+| desactualizada | > 30 min | muy tenue, borde gris, contada aparte |
+
+Se escalona en vez de interpolar a propósito: tres franjas nítidas se leen de un
+vistazo, mientras que un degradado continuo obliga a comparar dos puntos entre sí
+para saber cuál es más viejo. Y la edad se dice **siempre** en el emergente,
+incluso cuando es de hace segundos: si solo apareciera al envejecer, su ausencia
+se leería como «está aquí» en vez de como «no se sabe».
+
+Los umbrales viven en un módulo aparte por la misma razón que los filtros de KPI:
+el mapa desvanece el punto, la leyenda explica qué significa desvanecido y la
+tira cuenta cuántos lo están. Si esos tres se separan, el tablero dice tres cosas
+distintas sobre el mismo dato.
+
+Dos consecuencias de que toda la sección `/v1/campo` exija sesión operativa:
+
+- **Sin sesión no se consulta.** El tablero se ve en modo consulta y la capa
+  queda vacía; la leyenda tampoco anuncia el personal, porque una entrada de
+  leyenda para una capa vacía hace buscar en el mapa algo que no está.
+- **La consulta va aparte del resto del tablero**, no dentro del mismo
+  `Promise.all`. Un token vencido responde 403 y no puede tumbar la cola ni el
+  mapa, que se miran sin sesión a propósito. Cuando falla se dice por qué: dejar
+  la capa vacía sin explicación se leería como «no hay nadie en campo».
+
 ## Filtros del tablero
 
 Cada cifra de cabecera del tablero es un botón que filtra la cola **y el mapa a la
@@ -201,3 +240,36 @@ parezca un descuadre.
 El único mosaico que no filtra es «recursos disponibles», porque los recursos no
 son reportes. Se renderiza como texto y no como botón: un control que parece
 pulsable y no hace nada es peor que uno que no lo parece.
+
+### «Asignados sin llegada»
+
+El mosaico que existe para un defecto que ninguno de los otros puede mostrar. Al
+pasar a `ASIGNADO` el trigger fija `primera_respuesta_en`, eso apaga el término
+de espera del índice, y el reporte deja de subir en la cola. A partir de ahí un
+caso olvidado se ve **exactamente igual** que uno atendido.
+
+El filtro `estancados` los saca a la superficie: siguen en `ASIGNADO` —llegar al
+sitio los pasaría a `EN_ATENCION`— y su `primera_respuesta_en` tiene más de 30
+minutos. Se ancla ahí y no en `tomado_en` porque es el instante exacto en que el
+término de espera se apagó, así que mide el tiempo durante el que el reporte
+estuvo invisible para la priorización. Liberar el caso también lo saca de la
+cifra, que es correcto: vuelve a estar disponible y la cola lo recoge.
+
+Por qué una alerta y no un sexto término del índice: ver
+[`prioridad.md`](prioridad.md).
+
+### Filtro por severidad
+
+La leyenda del mapa hace doble oficio: explica el color y filtra por él. Es donde
+el operador ya está mirando cuando se pregunta «y si solo veo las críticas», así
+que poner el control en otra parte de la pantalla sería mandarlo a buscar.
+
+Es **ortogonal** al filtro de KPI y se combina con él con AND: «qué tan grave» y
+«en qué situación está» son preguntas distintas y un operador quiere cruzarlas.
+Los dos se anuncian juntos en la barra y se quitan por separado — con ambos
+activos, un «quitar filtro» único dejaría al operador sin saber cuál de los dos
+estaba recortando la lista.
+
+La severidad va a la cola **y** al GeoJSON del mapa, igual que el filtro de KPI.
+`GET /v1/reportes` ya la aceptaba; `GET /v1/tablero/cola` no, y sin eso tocar la
+leyenda habría dejado el mapa con tres puntos y la lista de al lado con veinte.

@@ -101,6 +101,7 @@ export type Resumen = {
     personas_afectadas: number;
     triados_por_ia: number;
     triados_por_persona: number;
+    asignados_estancados: number;
   };
   espera_maxima_minutos: number | null;
   recursos: {
@@ -150,7 +151,11 @@ export type NombreFiltro =
   | 'rescate'
   | 'ia_sin_revisar'
   | 'sin_responsable'
+  | 'estancados'
   | 'resueltos';
+
+/** Espejo de `severidad_reporte` en db/migrations/002_tipos.sql. */
+export type Severidad = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA' | 'DESCONOCIDA';
 
 export type CasoCampo = {
   id: string;
@@ -200,6 +205,27 @@ export type RutaCaso = {
   aviso?: string;
 };
 
+/**
+ * Personal de socorro con posición conocida.
+ *
+ * `antiguedad_s` no es un adorno: es la diferencia entre saber dónde está
+ * alguien y creer que se sabe. Una posición de hace dos horas dibujada igual
+ * que una de hace dos minutos manda equipos a donde ya no hay nadie, así que
+ * todo lo que muestre este dato tiene que mostrar también su edad.
+ */
+export type PersonalCampo = {
+  id: string;
+  nombre: string;
+  rol: string;
+  organizacion: string | null;
+  lat: number;
+  lng: number;
+  posicion_precision_m: number | null;
+  posicion_en: string;
+  antiguedad_s: number;
+  casos_abiertos: number;
+};
+
 export type ColeccionGeoJson = {
   type: 'FeatureCollection';
   features: {
@@ -224,15 +250,18 @@ export const api = {
 
   resumen: () => pedir<Resumen>('/v1/tablero/resumen'),
 
-  cola: (limite = 50, vivo = false, filtro?: NombreFiltro) =>
+  cola: (limite = 50, vivo = false, filtro?: NombreFiltro, severidad?: Severidad) =>
     pedir<{
       modo: string;
       filtro: NombreFiltro | null;
       filtro_etiqueta: string | null;
+      severidad: Severidad | null;
       total: number;
       reportes: ReporteCola[];
     }>(
-      `/v1/tablero/cola?limite=${limite}&vivo=${vivo}${filtro ? `&filtro=${filtro}` : ''}`,
+      `/v1/tablero/cola?limite=${limite}&vivo=${vivo}` +
+        (filtro ? `&filtro=${filtro}` : '') +
+        (severidad ? `&severidad=${severidad}` : ''),
     ),
 
   conglomerados: (radioM = 300) =>
@@ -243,8 +272,12 @@ export const api = {
   aislados: (umbralM = 5000) =>
     pedir<{ reportes: ReporteCola[] }>(`/v1/tablero/aislados?umbral_m=${umbralM}`),
 
-  reportesGeoJson: (filtro?: NombreFiltro) =>
-    pedir<ColeccionGeoJson>(`/v1/reportes?limite=500${filtro ? `&filtro=${filtro}` : ''}`),
+  reportesGeoJson: (filtro?: NombreFiltro, severidad?: Severidad) =>
+    pedir<ColeccionGeoJson>(
+      `/v1/reportes?limite=500` +
+        (filtro ? `&filtro=${filtro}` : '') +
+        (severidad ? `&severidad=${severidad}` : ''),
+    ),
 
   recursosGeoJson: () => pedir<ColeccionGeoJson>('/v1/recursos'),
 
@@ -290,6 +323,9 @@ export const api = {
   },
 
   misCasos: () => pedir<{ casos: CasoCampo[] }>('/v1/campo/mis-casos'),
+
+  /** Personal con posición conocida. Toda la sección /v1/campo exige sesión operativa. */
+  personalEnCampo: () => pedir<{ personal: PersonalCampo[] }>('/v1/campo/personal'),
 
   rutaHasta: (idCaso: string, lat: number, lng: number) =>
     pedir<RutaCaso>(`/v1/campo/casos/${idCaso}/ruta?lat=${lat}&lng=${lng}`),

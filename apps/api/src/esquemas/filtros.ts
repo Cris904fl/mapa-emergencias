@@ -54,6 +54,30 @@ export const FILTROS = {
     etiqueta: 'sin responsable en campo',
     condicion: 'r.responsable_id IS NULL',
   },
+  estancados: {
+    etiqueta: 'asignados sin llegada',
+    /**
+     * Casos que alguien tomó y a los que nunca llegó.
+     *
+     * Es el único defecto del sistema que puede dejar a alguien sin atención sin
+     * que nadie lo note: al pasar a `ASIGNADO` el trigger fija
+     * `primera_respuesta_en`, eso apaga el término de espera del índice, y el
+     * reporte deja de subir en la cola para siempre. Un caso olvidado se ve
+     * exactamente igual que uno atendido.
+     *
+     * Se ancla en `primera_respuesta_en` y no en `tomado_en` a propósito: es el
+     * instante exacto en que el término de espera se apagó, así que mide el
+     * tiempo durante el que el reporte estuvo invisible para la priorización.
+     *
+     * Que siga en `ASIGNADO` es justamente la señal — llegar al sitio lo pasa a
+     * `EN_ATENCION`.
+     *
+     * Los 30 minutos son un punto de partida, no un número medido: hay que
+     * calibrarlo con tiempos de llegada reales. Muy corto inunda el mosaico en
+     * una ciudad con tráfico; muy largo lo vuelve inútil.
+     */
+    condicion: `r.estado = 'ASIGNADO' AND r.primera_respuesta_en < now() - interval '30 minutes'`,
+  },
   resueltos: {
     etiqueta: 'resueltos',
     condicion: `r.estado = 'RESUELTO'`,

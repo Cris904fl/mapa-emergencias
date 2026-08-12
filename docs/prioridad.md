@@ -117,10 +117,22 @@ alguien lo hizo.
 
 Este cambio salió de una prueba que falló, no de una revisión de código.
 
-**Hueco conocido:** una asignación estancada —ASIGNADO hace horas, el equipo
-nunca llegó— no vuelve a subir por esta vía. Es un problema distinto
-(seguimiento de asignaciones) y merece su propio término o su propia alerta, no
-reutilizar este.
+**Hueco conocido, hoy cubierto por una alerta y no por la fórmula:** una
+asignación estancada —ASIGNADO hace horas, el equipo nunca llegó— no vuelve a
+subir por esta vía. Sigue sin subir: se resolvió con un mosaico propio
+(«asignados sin llegada», filtro `estancados`) que los saca a la superficie sin
+tocar los pesos.
+
+Se eligió la alerta y no un sexto término a propósito. Agregar un término obliga
+a repartir de nuevo los cinco pesos para que sigan sumando 100 y a volver a medir
+el orden resultante — es el invariante más delicado del sistema y no conviene
+moverlo sin datos reales de cuánto tardan las llegadas. La alerta cuesta una
+condición SQL y no arriesga nada; el precio es que depende de que alguien mire el
+tablero. Cuando haya tiempos de llegada medidos, el término propio es la solución
+correcta.
+
+El umbral de 30 minutos es un punto de partida sin medir: muy corto inunda el
+mosaico en una ciudad con tráfico, muy largo lo vuelve inútil.
 
 ## Los pesos viven en datos
 

@@ -4,7 +4,8 @@ import { bd } from '../db/pool.ts';
 import { config } from '../config.ts';
 import { pesosVigentes, refrescarPrioridadesVencidas } from '../servicios/prioridad.ts';
 import { solicitudInvalida } from '../lib/errores.ts';
-import { condicionDeFiltro, etiquetaDeFiltro, zFiltro } from '../esquemas/filtros.ts';
+import { FILTROS, condicionDeFiltro, etiquetaDeFiltro, zFiltro } from '../esquemas/filtros.ts';
+import { zSeveridad } from '../esquemas/dominio.ts';
 
 /**
  * Consultas agregadas para el tablero de la sala de crisis. Todas de lectura y
@@ -36,6 +37,22 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
 
     const { condicion, incluyeCerrados } = condicionDeFiltro(filtro);
 
+    /**
+     * Severidad, ortogonal al filtro de KPI.
+     *
+     * El mapa ya podía filtrar por severidad (`GET /v1/reportes`) pero la cola
+     * no, así que tocar la leyenda habría dejado el mapa mostrando tres puntos y
+     * la lista veinte. Se combina con el filtro de KPI con AND: los dos
+     * responden preguntas distintas —«qué tan grave» y «en qué situación
+     * está»— y un operador quiere poder cruzarlas.
+     */
+    const severidad = consulta.severidad
+      ? zSeveridad.safeParse(consulta.severidad)
+      : { success: false as const };
+    if (consulta.severidad && !severidad.success) {
+      throw solicitudInvalida(`Severidad desconocida: ${consulta.severidad}`);
+    }
+
     // La vista viva no expone todas las columnas que usan los filtros, así que
     // se filtra sobre la tabla y se recalcula el puntaje al vuelo por fila. Es
     // el mismo compromiso que ya tenía el modo vivo: exactitud a cambio de una
@@ -43,6 +60,10 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
     const donde = [
       incluyeCerrados ? null : `r.estado NOT IN ('RESUELTO', 'DUPLICADO', 'DESCARTADO')`,
       condicion,
+      // El valor sale del enum ya validado, no de la petición en crudo: es la
+      // misma razón por la que las condiciones de filtros.ts se pueden
+      // interpolar sin riesgo de inyección.
+      severidad.success ? `r.severidad = '${severidad.data}'` : null,
     ]
       .filter(Boolean)
       .join(' AND ');
@@ -80,6 +101,7 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
       modo: vivo ? 'vivo' : 'materializado',
       filtro: filtro ?? null,
       filtro_etiqueta: filtro ? etiquetaDeFiltro(filtro) : null,
+      severidad: severidad.success ? severidad.data : null,
       total: rows.length,
       pesos: await pesosVigentes(),
       reportes: rows,
@@ -199,8 +221,13 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
          coalesce(sum(personas_afectadas) FILTER (
            WHERE estado NOT IN ('RESUELTO','DUPLICADO','DESCARTADO')), 0)::int               AS personas_afectadas,
          (count(*) FILTER (WHERE origen_triage = 'IA'))::int                                 AS triados_por_ia,
-         (count(*) FILTER (WHERE origen_triage = 'OPERADOR'))::int                           AS triados_por_persona
-       FROM reportes`,
+         (count(*) FILTER (WHERE origen_triage = 'OPERADOR'))::int                           AS triados_por_persona,
+         -- La condición se toma del catálogo de filtros en vez de copiarla: es la
+         -- misma que responde la cola cuando se toca este mosaico, y si las dos
+         -- se separan el tablero miente sobre su propia cifra. Por eso la tabla
+         -- va aliasada como r, que es el alias que usan las condiciones.
+         (count(*) FILTER (WHERE ${FILTROS.estancados.condicion}))::int                      AS asignados_estancados
+       FROM reportes r`,
     );
 
     const { rows: masAntiguo } = await bd.consultar<{ minutos: number | null }>(
