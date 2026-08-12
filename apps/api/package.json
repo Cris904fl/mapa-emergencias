@@ -5,12 +5,12 @@
   "type": "module",
   "description": "API Fastify sobre PostGIS para el mapa de afectaciones",
   "scripts": {
-    "dev": "node --watch --env-file=../../.env src/servidor.ts",
-    "iniciar": "node --env-file=../../.env src/servidor.ts",
-    "trabajadores": "node --env-file=../../.env src/trabajadores/index.ts",
-    "migrar": "node --env-file=../../.env src/db/migrar.ts",
-    "sembrar": "node --env-file=../../.env src/db/sembrar.ts",
-    "clave": "node --env-file=../../.env src/db/hash-clave.ts",
+    "dev": "node --watch --env-file-if-exists=../../.env src/servidor.ts",
+    "iniciar": "node --env-file-if-exists=../../.env src/servidor.ts",
+    "trabajadores": "node --env-file-if-exists=../../.env src/trabajadores/index.ts",
+    "migrar": "node --env-file-if-exists=../../.env src/db/migrar.ts",
+    "sembrar": "node --env-file-if-exists=../../.env src/db/sembrar.ts",
+    "clave": "node --env-file-if-exists=../../.env src/db/hash-clave.ts",
     "probar": "node --env-file=../../.env.pruebas --test --test-concurrency=1 \"test/**/*.test.ts\"",
     "tipos": "tsc --noEmit",
     "construir": "tsc --noEmit"

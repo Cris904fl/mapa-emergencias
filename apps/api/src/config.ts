@@ -11,6 +11,15 @@ const esquema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria'),
   REDIS_URL: z.string().default('redis://localhost:6381'),
 
+  /**
+   * Puerto de escucha.
+   *
+   * `PORT` gana sobre `API_PUERTO` porque es lo que inyectan los hospedajes
+   * (Render, Koyeb, Fly) y no se puede cambiar desde su panel. Sin esto el
+   * despliegue parece exitoso —el proceso arranca y no se queja— pero la
+   * plataforma enruta a un puerto donde no hay nadie escuchando, y el síntoma
+   * es un 502 sin una sola línea de error en los registros.
+   */
   API_PUERTO: z.coerce.number().int().positive().default(3010),
   API_HOST: z.string().default('0.0.0.0'),
   LOG_NIVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -100,7 +109,11 @@ const esquema = z.object({
   RUTEO_RADIO_OBSTACULO_M: z.coerce.number().int().positive().default(60),
 });
 
-const analisis = esquema.safeParse(process.env);
+const analisis = esquema.safeParse({
+  ...process.env,
+  // El puerto que inyecta el hospedaje manda sobre el del archivo de entorno.
+  API_PUERTO: process.env.PORT ?? process.env.API_PUERTO,
+});
 
 if (!analisis.success) {
   const detalles = analisis.error.issues

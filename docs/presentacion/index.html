@@ -1,0 +1,601 @@
+<title>Mapa de afectaciones — reportar una emergencia aunque no haya señal</title>
+
+<style>
+  :root {
+    --ground: #f5f7f6;
+    --surface: #ffffff;
+    --ink: #11201d;
+    --ink-soft: #4a5a56;
+    --ink-faint: #7c8b87;
+    --line: #dde4e1;
+    --accent: #0d6e63;
+    --accent-soft: #e6f1ef;
+    --signal: #b4400c;
+    --signal-ground: #fdf0e8;
+    --signal-line: #f0c9b2;
+
+    --sans: "Helvetica Neue", Arial, "Segoe UI", Roboto, system-ui, sans-serif;
+    --serif: Georgia, "Noto Serif", "Times New Roman", serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1513;
+      --surface: #14201d;
+      --ink: #e7efec;
+      --ink-soft: #a8b8b3;
+      --ink-faint: #7d8d89;
+      --line: #263531;
+      --accent: #58c3b4;
+      --accent-soft: #16302c;
+      --signal: #ff8a4c;
+      --signal-ground: #2a1810;
+      --signal-line: #5c3320;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1513;
+    --surface: #14201d;
+    --ink: #e7efec;
+    --ink-soft: #a8b8b3;
+    --ink-faint: #7d8d89;
+    --line: #263531;
+    --accent: #58c3b4;
+    --accent-soft: #16302c;
+    --signal: #ff8a4c;
+    --signal-ground: #2a1810;
+    --signal-line: #5c3320;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 1.0625rem;
+    line-height: 1.72;
+    margin: 0;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  .envoltura {
+    max-width: 36rem;
+    margin: 0 auto;
+    padding: 0 1.35rem;
+  }
+
+  /* ---------------------------------------------------------- cabecera */
+
+  header {
+    padding: 3.5rem 0 2.25rem;
+  }
+
+  .marca {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .marca::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(1.95rem, 6.5vw, 2.7rem);
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    text-wrap: balance;
+    margin: 0 0 1.1rem;
+  }
+
+  .entrada {
+    font-size: 1.18rem;
+    line-height: 1.62;
+    color: var(--ink-soft);
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  /* ------------------------------------------------------------- aviso */
+  /* Va a sangre y con esquinas rectas, como un aviso público y no como una
+     tarjeta de producto: es lo único de esta página que alguien no puede
+     terminar de leer sin haber visto. */
+
+  .aviso {
+    background: var(--signal-ground);
+    border-top: 3px solid var(--signal);
+    border-bottom: 1px solid var(--signal-line);
+    padding: 1.9rem 0 2rem;
+    margin: 2.75rem 0 3rem;
+  }
+
+  .aviso-titulo {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin: 0 0 0.85rem;
+  }
+
+  .aviso p {
+    margin: 0 0 0.9rem;
+    font-size: 1.09rem;
+  }
+
+  .aviso p:last-child {
+    margin-bottom: 0;
+  }
+
+  .aviso strong {
+    font-weight: 700;
+  }
+
+  .linea-123 {
+    font-family: var(--sans);
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--signal);
+    display: block;
+    margin: 1.15rem 0 0.35rem;
+  }
+
+  /* ---------------------------------------------------------- secciones */
+
+  section {
+    padding-bottom: 2.75rem;
+  }
+
+  h2 {
+    font-family: var(--sans);
+    font-size: 1.28rem;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+    padding-top: 2.25rem;
+    border-top: 1px solid var(--line);
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    margin: 1.9rem 0 0.55rem;
+  }
+
+  p {
+    margin: 0 0 1.15rem;
+    text-wrap: pretty;
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  strong {
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+  }
+
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* --------------------------------------------------------- secuencia */
+  /* Numerada porque es de verdad una secuencia: cada paso depende del
+     anterior. No es decoración. */
+
+  .pasos {
+    list-style: none;
+    counter-reset: paso;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+  }
+
+  .pasos li {
+    counter-increment: paso;
+    display: grid;
+    grid-template-columns: 2rem 1fr;
+    gap: 0.9rem;
+    align-items: start;
+  }
+
+  .pasos li::before {
+    content: counter(paso);
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pasos p {
+    margin: 0;
+    line-height: 1.6;
+  }
+
+  .pasos .paso-titulo {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 1rem;
+    display: block;
+    margin-bottom: 0.15rem;
+    line-height: 1.35;
+  }
+
+  /* ------------------------------------------------------------ listas */
+
+  .lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .lista li {
+    padding-left: 1.15rem;
+    position: relative;
+    line-height: 1.6;
+  }
+
+  .lista li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.72em;
+    width: 0.42rem;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  .lista.limites li::before {
+    background: var(--ink-faint);
+  }
+
+  /* -------------------------------------------------------------- beta */
+
+  .beta {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    padding: 1.5rem 1.4rem;
+    margin: 0 0 1.5rem;
+  }
+
+  .beta-etiqueta {
+    font-family: var(--sans);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 0.6rem;
+  }
+
+  .enlace-beta {
+    font-family: var(--sans);
+    font-size: 1.05rem;
+    font-weight: 700;
+    word-break: break-all;
+  }
+
+  .pendiente {
+    font-family: var(--sans);
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink-faint);
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 6px,
+      var(--line) 6px,
+      var(--line) 7px
+    );
+    border: 1px dashed var(--ink-faint);
+    padding: 0.75rem 0.9rem;
+    display: block;
+  }
+
+  /* ---------------------------------------------------------- contacto */
+
+  .contacto {
+    background: var(--accent-soft);
+    border-top: 2px solid var(--accent);
+    padding: 1.5rem 1.4rem;
+    margin-top: 2rem;
+  }
+
+  .contacto p {
+    margin: 0 0 0.7rem;
+  }
+
+  .contacto p:last-child {
+    margin-bottom: 0;
+  }
+
+  .contacto a {
+    font-family: var(--sans);
+    font-weight: 700;
+    word-break: break-all;
+  }
+
+  .contacto-nota {
+    font-size: 0.94rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+  }
+
+  /* ------------------------------------------------------------- cita */
+
+  .cierre {
+    border-top: 1px solid var(--line);
+    margin-top: 1rem;
+    padding: 2.5rem 0 4rem;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+
+  .cierre p {
+    margin-bottom: 0.9rem;
+  }
+
+  .firma {
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.01em;
+  }
+</style>
+
+<header>
+  <div class="envoltura">
+    <div class="marca">Proyecto abierto · Colombia</div>
+    <h1>Reportar una emergencia aunque no haya señal</h1>
+    <p class="entrada">
+      Cuando pasa algo grave, los reportes llegan por WhatsApp, por radio y de boca en
+      boca. Nadie alcanza a ordenarlos, y quien tiene que decidir a dónde mandar los
+      equipos primero termina decidiendo con lo que le llegó de último. Esto es un
+      intento de arreglar eso.
+    </p>
+  </div>
+</header>
+
+<div class="aviso">
+  <div class="envoltura">
+    <p class="aviso-titulo">Antes de seguir leyendo</p>
+    <p>
+      <strong>Esto no reemplaza a la línea de emergencias.</strong> Si usted tiene una
+      emergencia ahora mismo, no la reporte acá: llame.
+    </p>
+    <span class="linea-123">123</span>
+    <p>
+      Esta aplicación está en prueba y <strong>no hay nadie del otro lado atendiendo</strong>.
+      Un reporte hecho acá hoy no hace que llegue ayuda. Sirve para ver si la herramienta
+      funciona, no para pedir auxilio.
+    </p>
+  </div>
+</div>
+
+<div class="envoltura">
+  <section>
+    <h2>Por qué existe</h2>
+    <p>
+      En una emergencia lo primero que se cae es la señal. Cualquier aplicación que
+      dé por hecho que hay internet pierde justo los reportes que más importan: los
+      del sitio donde se cayó todo.
+    </p>
+    <p>
+      Y aun cuando los reportes llegan, llegan en desorden. «Se cayó una casa en el
+      barrio de arriba» no dice cuántas personas hay adentro, ni si alguien quedó
+      atrapado, ni qué tan lejos está el equipo más cercano. Con veinte mensajes así,
+      la decisión de a quién atender primero se vuelve una corazonada.
+    </p>
+  </section>
+
+  <section>
+    <h2>Qué hace, del lado de usted</h2>
+    <ol class="pasos">
+      <li>
+        <div>
+          <span class="paso-titulo">Reporta desde el celular, con o sin señal</span>
+          <p>
+            El reporte se guarda en su teléfono <em>antes</em> de intentar enviarse. Si
+            no hay red, queda esperando y se manda solo cuando vuelva, así usted haya
+            cerrado la aplicación. No necesita crear cuenta ni dar sus datos.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <span class="paso-titulo">Recibe un código que se puede dictar por radio</span>
+          <p>
+            Algo como <strong>RPT-7F3K2</strong>. No lleva ceros ni oes, ni unos ni eles,
+            para que nadie se confunda al repetirlo en voz alta o por radio.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <span class="paso-titulo">El reporte se ordena junto a los demás</span>
+          <p>
+            Un puntaje ordena la fila de atención según cuántas personas hay en riesgo,
+            qué tan grave es, cuánto lleva esperando, qué tan lejos está la ayuda más
+            cercana y si hay varios reportes juntos en la misma cuadra.
+          </p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <span class="paso-titulo">Alguien lo toma y queda registrado quién</span>
+          <p>
+            Un socorrista ve los casos cerca, calcula la ruta —avisando de las vías que
+            otros reportaron bloqueadas—, marca que llegó y lo cierra con una nota. Cada
+            paso queda con nombre y hora.
+          </p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Cómo se decide a quién se atiende primero</h2>
+    <p>
+      Esta es la parte que más cuidado tuvo, porque es la que puede hacer daño si se
+      hace mal.
+    </p>
+    <p>
+      El puntaje <strong>se puede abrir y ver por dentro</strong>. Quien mira el tablero
+      puede tocar cualquier número y ver de qué está hecho: cuánto aportó la cantidad
+      de personas, cuánto la gravedad, cuánto la espera. Nadie tiene que confiar a
+      ciegas en un número que ordena rescates, y quien después tenga que explicar por
+      qué mandó el equipo a un lado y no al otro, puede hacerlo.
+    </p>
+
+    <h3>Hay una inteligencia artificial, y no decide nada</h3>
+    <p>
+      El sistema puede leer un reporte escrito a las carreras y proponer cuántas
+      personas menciona o qué tan grave suena. <strong>Propone; no aplica.</strong> No
+      puede sobrescribir lo que escribió una persona, no puede subir sola la cantidad
+      de atrapados —que es donde más se equivoca— y todo lo que sugiere queda marcado
+      como «sin revisar» hasta que alguien lo confirme.
+    </p>
+
+    <h3>Las personas fallecidas no suben el puntaje</h3>
+    <p>
+      Recuperar un cuerpo y rescatar a alguien con vida son tareas distintas. Si las
+      dos sumaran igual, el sistema mandaría equipos a donde ya no hay nada que salvar
+      y los quitaría de donde todavía sí. Es una decisión dura de escribir y es
+      deliberada.
+    </p>
+  </section>
+
+  <section>
+    <h2>Qué todavía no es</h2>
+    <p>
+      Prefiero decirlo yo antes de que alguien se lleve una decepción probándolo.
+    </p>
+    <ul class="lista limites">
+      <li>
+        <strong>No hay nadie atendiendo.</strong> Hoy es una demostración. Los reportes
+        llegan a un tablero que no está siendo vigilado.
+      </li>
+      <li>
+        <strong>El mapa tiene datos de prueba.</strong> Está armado sobre un municipio y
+        dos barrios de Bogotá, no sobre la geografía real del país.
+      </li>
+      <li>
+        <strong>No está conectado con ninguna entidad.</strong> Ni bomberos, ni Defensa
+        Civil, ni alcaldías. Nada de lo que se reporte acá le llega a nadie oficial.
+      </li>
+      <li>
+        <strong>No ha pasado por una emergencia real.</strong> Todo lo que sé de él lo
+        sé de pruebas que hice yo.
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>La beta</h2>
+
+    <div class="beta">
+      <span class="beta-etiqueta">Abre mañana</span>
+      <p class="pendiente">
+        ← Pegue acá el enlace de la beta antes de compartir esta página
+      </p>
+    </div>
+
+    <p>
+      Lo que necesito no es que la usen: es que <strong>la rompan</strong>. Que reporten
+      cosas inventadas, que la abran en modo avión, que la usen en un teléfono viejo,
+      que le pongan un texto larguísimo, que la miren con los datos apagados.
+    </p>
+    <p>
+      Y sobre todo, que me digan dónde se quedaron trabados. Si algo no se entendió,
+      el problema es del diseño, no de quien lo leyó. Como es una prueba, ponga
+      «PRUEBA» al principio de la descripción para no confundir los reportes de
+      ensayo con los demás.
+    </p>
+    <p>
+      Me sirve especialmente saber: ¿se entiende qué hacer al abrirla?, ¿el formulario
+      pide algo que usted no sabría contestar en medio de un susto?, ¿funcionó sin
+      señal?
+    </p>
+
+    <div class="contacto">
+      <span class="beta-etiqueta">Escríbame</span>
+      <p>
+        Cualquier cosa que haya notado, por pequeña que parezca:
+        <a href="mailto:cristiafl3@gmail.com">cristiafl3@gmail.com</a>
+      </p>
+      <p class="contacto-nota">
+        Si algo no le funcionó, cuénteme qué teléfono usó y qué estaba haciendo. Con
+        eso suele bastar para encontrar la falla.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Qué pasa si funciona</h2>
+    <p>
+      Si de la beta sale que esto sirve de verdad, la intención es montarlo en serio,
+      <strong>pagando lo que haya que pagar</strong> para que quede disponible y
+      estable. Hoy funciona sobre servicios gratuitos de mapas y rutas cuyas
+      condiciones de uso no permiten un servicio real, así que sostenerlo cuesta
+      plata, y estoy dispuesto a ponerla.
+    </p>
+    <p>
+      Lo que no voy a hacer es dejarlo a medio camino y decir que está listo. Una
+      herramienta de emergencias que promete más de lo que cumple es peor que no
+      tener ninguna: alguien deja de llamar a donde sí le iban a contestar.
+    </p>
+  </section>
+</div>
+
+<div class="cierre">
+  <div class="envoltura">
+    <p>
+      El código es abierto y cualquiera puede revisarlo, incluida la fórmula que ordena
+      la fila de atención. Si algo de lo que está acá le parece mal pensado, quiero
+      saberlo.
+    </p>
+    <p class="firma">
+      Cristian Flórez · proyecto personal, sin vínculo con ninguna entidad oficial
+    </p>
+  </div>
+</div>
