@@ -1,6 +1,8 @@
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { bd } from '../db/pool.ts';
-import { pesosVigentes } from '../servicios/prioridad.ts';
+import { config } from '../config.ts';
+import { pesosVigentes, refrescarPrioridadesVencidas } from '../servicios/prioridad.ts';
 import { solicitudInvalida } from '../lib/errores.ts';
 
 /**
@@ -57,6 +59,39 @@ export async function rutasTablero(app: FastifyInstance): Promise<void> {
     );
 
     return { modo: 'materializado', pesos: await pesosVigentes(), reportes: rows };
+  });
+
+  /**
+   * Refresco de prioridades por invocación externa.
+   *
+   * Existe para el despliegue sin Redis: dos términos del índice cambian solos
+   * —la espera crece con el reloj y la concentración cambia cuando llegan
+   * reportes vecinos— y sin el trabajador de BullMQ nadie los recalcula. Un cron
+   * externo gratuito (cron-job.org, GitHub Actions) golpea esta ruta cada minuto
+   * y cumple la misma función.
+   *
+   * Se protege con un secreto compartido y no con la sesión de operador porque
+   * el llamador es una máquina, no una persona.
+   */
+  app.post('/v1/mantenimiento/refrescar-prioridades', async (peticion, respuesta) => {
+    const secreto = config.SECRETO_MANTENIMIENTO;
+    if (!secreto) {
+      throw solicitudInvalida('SECRETO_MANTENIMIENTO no está configurado en esta instancia');
+    }
+
+    const enviado = peticion.headers['x-secreto-mantenimiento'];
+    // Comparación de longitud constante: esta ruta es pública.
+    const iguales =
+      typeof enviado === 'string' &&
+      enviado.length === secreto.length &&
+      timingSafeEqual(Buffer.from(enviado), Buffer.from(secreto));
+
+    if (!iguales) {
+      return respuesta.code(401).send({ error: 'no_autenticado', mensaje: 'Secreto inválido' });
+    }
+
+    const refrescados = await refrescarPrioridadesVencidas(60, 500);
+    return { refrescados };
   });
 
   /** Consolidado por zona administrativa. */

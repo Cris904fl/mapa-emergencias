@@ -17,6 +17,11 @@ import { refrescarPrioridad } from './prioridad.ts';
  *      leyendo su prosa. Solo se rellenan los campos que quedaron en cero.
  *   3. `requiere_rescate` solo puede subir a true, nunca bajar a false. Un
  *      falso negativo acá significa no mandar un equipo a donde hacía falta.
+ *   4. Si el modelo marcó `cantidad_indeterminada`, sus conteos no se aplican.
+ *      Es la señal de que el texto decía "varias personas" sin dar cifra.
+ *   5. Si el proveedor no es de confianza para aplicar —lo normal con un modelo
+ *      local, ver `Proveedor.confiableParaAplicar`— la propuesta se guarda y se
+ *      muestra, pero la aplica una persona.
  *
  * La propuesta completa se guarda en `extracciones_ia` pase lo que pase,
  * incluso cuando no se aplica: sirve para auditar, para medir precisión contra
@@ -47,27 +52,49 @@ export type ResultadoTriage =
 /**
  * Decide qué campos de la propuesta se pueden aplicar sin pisar información
  * humana. Devuelve el fragmento a actualizar y la lista de campos tocados.
+ *
+ * Se exporta para poder probarla directamente: es la función donde vive la
+ * política de qué puede escribir un modelo, y merece pruebas propias sin tener
+ * que levantar un proveedor de inferencia.
  */
-function calcularActualizacion(
+export function calcularActualizacion(
   reporte: FilaReporte,
   propuesta: Extraccion,
 ): { valores: Record<string, unknown>; campos: string[] } {
   const valores: Record<string, unknown> = {};
   const campos: string[] = [];
 
-  const conteos = [
-    ['personas_afectadas', propuesta.personas_afectadas],
-    ['personas_atrapadas', propuesta.personas_atrapadas],
-    ['personas_heridas', propuesta.personas_heridas],
-    ['personas_fallecidas', propuesta.personas_fallecidas],
-    ['personas_vulnerables', propuesta.personas_vulnerables],
-  ] as const;
+  // Si el modelo dijo que la cantidad es indeterminada, sus conteos no valen:
+  // el texto decía "varias personas" o "no sabemos cuántos". Aplicarlos sería
+  // meter a la cola una cifra que nadie afirmó.
+  if (!propuesta.cantidad_indeterminada) {
+    // `personas_atrapadas` está deliberadamente FUERA de esta lista.
+    //
+    // Es el campo con más apalancamiento del sistema: pesa ×3 en la carga
+    // humana del índice de prioridad, más que ningún otro. Y es el que el
+    // modelo local se equivoca de forma reproducible: ante "se nos cayó el
+    // techo, somos una familia de 7" propuso 7 atrapadas, y ante "se nos inundó
+    // la casa, el agua nos llega a la rodilla, somos 4" propuso 4 atrapadas.
+    // En ninguno de los dos casos el texto dice que alguien esté atrapado —
+    // quedarse sin techo o con agua en la casa no es estar atrapado— y en ambos
+    // el modelo lo afirmó con confianza ALTA.
+    //
+    // El resultado sería una cola de rescate ordenada por gente que no necesita
+    // rescate. Así que la propuesta se guarda y se muestra al operador en el
+    // tablero, pero este número lo escribe una persona.
+    const conteos = [
+      ['personas_afectadas', propuesta.personas_afectadas],
+      ['personas_heridas', propuesta.personas_heridas],
+      ['personas_fallecidas', propuesta.personas_fallecidas],
+      ['personas_vulnerables', propuesta.personas_vulnerables],
+    ] as const;
 
-  for (const [campo, valorPropuesto] of conteos) {
-    // Solo se rellena lo que el ciudadano dejó vacío.
-    if (reporte[campo] === 0 && valorPropuesto > 0) {
-      valores[campo] = valorPropuesto;
-      campos.push(campo);
+    for (const [campo, valorPropuesto] of conteos) {
+      // Solo se rellena lo que el ciudadano dejó vacío.
+      if (reporte[campo] === 0 && valorPropuesto > 0) {
+        valores[campo] = valorPropuesto;
+        campos.push(campo);
+      }
     }
   }
 
@@ -156,15 +183,39 @@ export async function triarReporteConIa(reporteId: string): Promise<ResultadoTri
 
   const justificacion = [
     resultado.propuesta.justificacion,
+    resultado.propuesta.cantidad_indeterminada
+      ? 'El modelo indicó que la cantidad de personas es indeterminada: hay que averiguarla.'
+      : null,
     discrepancias.length > 0 ? `Discrepancias: ${discrepancias.join('; ')}` : null,
   ]
     .filter(Boolean)
     .join(' | ');
 
+  // Cuatro condiciones para escribir en los campos canónicos. La ausencia de
+  // cualquiera deja la propuesta registrada y visible, pero sin aplicar.
+  const motivosParaNoAplicar: string[] = [];
+
+  if (campos.length === 0) {
+    motivosParaNoAplicar.push('la propuesta no agregaba nada sobre lo que ya reportó el ciudadano');
+  }
   // La confianza BAJA se registra pero no se aplica: cuando el modelo mismo
   // dice que tuvo que inferir, el valor de tenerlo en la cola es menor que el
   // riesgo de ensuciar los conteos.
-  const aplicar = campos.length > 0 && resultado.propuesta.confianza !== 'BAJA';
+  if (resultado.propuesta.confianza === 'BAJA') {
+    motivosParaNoAplicar.push('confianza BAJA declarada por el modelo');
+  }
+  if (resultado.propuesta.cantidad_indeterminada) {
+    motivosParaNoAplicar.push('la cantidad de personas quedó indeterminada');
+  }
+  // Un modelo local no está autorizado por defecto. Ver la nota en
+  // Proveedor.confiableParaAplicar y las mediciones en docs/ia-local.md.
+  if (!resultado.confiableParaAplicar) {
+    motivosParaNoAplicar.push(
+      'el proveedor no está autorizado a aplicar sin revisión (IA_APLICAR_AUTOMATICAMENTE=false)',
+    );
+  }
+
+  const aplicar = motivosParaNoAplicar.length === 0;
 
   const extraccionId = await enTransaccion(async (cliente: Consultador) => {
     const { rows: insertadas } = await cliente.consultar<{ id: string }>(
@@ -204,10 +255,7 @@ export async function triarReporteConIa(reporteId: string): Promise<ResultadoTri
   if (!aplicar) {
     return {
       estado: 'registrada_sin_aplicar',
-      motivo:
-        campos.length === 0
-          ? 'La propuesta no agregaba nada sobre lo que ya reportó el ciudadano'
-          : `Confianza ${resultado.propuesta.confianza}: se deja a revisión humana`,
+      motivo: motivosParaNoAplicar.join('; '),
       extraccionId,
     };
   }

@@ -21,16 +21,19 @@ Ciudadano → PWA (offline-first) → API Fastify → PostgreSQL + PostGIS
 | API Fastify (reportes, recursos, tablero, sesión, medios) | 20 pruebas |
 | PWA offline-first (IndexedDB + service worker + Background Sync) | Verificada en navegador |
 | Tablero GIS (MapLibre, DBSCAN, zonas, cola priorizada) | Verificado en navegador |
-| Extracción estructurada con Claude (texto y multimodal) | **Escrita, sin ejecutar** — ver abajo |
+| Extracción de texto libre con Ollama (modelo local, gratis) | Medida y calibrada — [`docs/ia-local.md`](docs/ia-local.md) |
+| Los mismos prompts sobre Groq/OpenRouter o Anthropic | Escrito, sin medir |
+| Etiquetado multimodal de fotos | Escrito, sin medir (requiere modelo con visión) |
 
-**La extracción por IA no se ha ejecutado contra el modelo real.** El código está
-completo y tipado contra el SDK instalado, pero no hubo `ANTHROPIC_API_KEY` para
-probarlo de punta a punta. El resto del sistema sí corre sin ella: sin clave, los
+La extracción con Ollama sí se ejecutó de punta a punta y se calibró contra casos
+reales: tres iteraciones de esquema y prompt, con las mediciones y los fallos
+documentados. La IA es opcional en todo caso — con `IA_PROVEEDOR=ninguno` los
 reportes se aceptan igual y quedan con `origen_triage = 'CIUDADANO'`.
 
 ## Arrancar
 
-Requisitos: Node 22+ (probado en 24), Docker.
+Requisitos: Node 22+ (probado en 24), Docker. Opcional: [Ollama](https://ollama.com)
+para la extracción de texto libre.
 
 ```bash
 cp .env.example .env
@@ -38,6 +41,7 @@ npm install
 npm run bd:arriba      # PostGIS en 5434, Redis en 6381
 npm run bd:migrar
 npm run bd:sembrar     # datos de prueba sobre coordenadas de Bogotá
+ollama pull qwen2.5    # opcional, 4.4 GB
 ```
 
 Tres procesos, en terminales aparte:
@@ -92,7 +96,7 @@ que justificar a dónde mandó el equipo.
 
 ### La IA estructura texto; no decide a quién se rescata
 
-Tres candados, y el primero está en la base de datos para que ningún camino de
+Seis candados, y el primero está en la base de datos para que ningún camino de
 código pueda evadirlo:
 
 1. Si `origen_triage = 'OPERADOR'`, un proceso automático no puede escribir los
@@ -102,6 +106,20 @@ código pueda evadirlo:
    es mejor fuente que un modelo leyendo su prosa.
 3. `requiere_rescate` solo puede subir a `true`, nunca bajar. Un falso negativo
    ahí significa no mandar un equipo a donde hacía falta.
+4. Si el modelo marca `cantidad_indeterminada` —el texto decía «varias personas»
+   sin dar cifra— **ninguno** de sus conteos se aplica.
+5. **`personas_atrapadas` no se aplica nunca automáticamente**, ni con confianza
+   ALTA. Pesa ×3 en el índice de prioridad y es el campo donde el modelo local
+   falla de forma reproducible: ante «se nos inundó la casa, somos 4» propuso 4
+   atrapadas. La evidencia está en [`docs/ia-local.md`](docs/ia-local.md).
+6. Con un modelo local, `IA_APLICAR_AUTOMATICAMENTE=false` por defecto: la
+   propuesta se guarda, se muestra en el tablero, y la aplica un operador.
+
+El orden de los campos del esquema de extracción **es funcional**: poner la
+justificación primero y las clasificaciones al final subió la precisión de
+categoría de 1/4 a 6/7 con el mismo modelo, porque bajo decodificación restringida
+el JSON se emite en el orden del esquema y así el modelo razona antes de
+comprometerse. Hay una prueba que falla si alguien lo reordena.
 
 Cada propuesta del modelo se guarda completa en `extracciones_ia` incluso cuando
 no se aplica, con su justificación y las discrepancias detectadas frente a lo que
@@ -201,10 +219,25 @@ Emergencias a menos de 2 km de un hospital · concentraciones por densidad
 cercanos a cada emergencia (KNN con `<->`) · reportes fuera del alcance de todo
 recurso · posibles duplicados · ocupación de albergues.
 
+## Documentos de diseño
+
+- [`docs/prioridad.md`](docs/prioridad.md) — el índice de prioridad, por qué la
+  fórmula original no funcionaba y cómo se explica cada puntaje.
+- [`docs/offline.md`](docs/offline.md) — el modo sin conexión, las cuatro capas de
+  reintento y el defecto que apareció al probarlo.
+- [`docs/ia-local.md`](docs/ia-local.md) — Ollama, las tres iteraciones medidas
+  del prompt, y qué no se le deja escribir al modelo.
+- [`docs/despliegue-gratuito.md`](docs/despliegue-gratuito.md) — cómo publicarlo
+  sin pagar, y por qué Ollama no cabe en una capa gratuita.
+
 ## Pendientes
 
-- Ejecutar la extracción por IA contra el modelo real y calibrar el prompt.
-- Almacenamiento de medios en S3/MinIO (hoy disco local; el esquema no cambia).
+- Medir el etiquetado de fotos: `qwen2.5` no es multimodal, hace falta bajar
+  `gemma3:4b` o similar.
+- Medir la calidad de la ruta `compatible` (Groq/OpenRouter) con este prompt antes
+  de confiarle la aplicación automática.
+- Almacenamiento de medios en S3/MinIO o Supabase Storage (hoy disco local; el
+  esquema no cambia).
 - Cargar la geografía real de DIVIPOLA en `lugares` (hoy hay polígonos de prueba).
 - Un proveedor de teselas propio: el mapa usa OpenStreetMap, cuya política de uso
   no permite tráfico de producción.

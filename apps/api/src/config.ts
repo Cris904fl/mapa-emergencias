@@ -19,12 +19,60 @@ const esquema = z.object({
 
   ALMACEN_MEDIOS: z.string().default('./almacen'),
 
-  // La IA es opcional a propósito. Sin clave la API acepta reportes igual y
-  // simplemente no los enriquece: la extracción automática es una comodidad,
-  // no un requisito para recibir un pedido de auxilio.
+  /**
+   * Secreto para la ruta de mantenimiento que refresca prioridades.
+   *
+   * Solo hace falta en un despliegue sin Redis, donde un cron externo reemplaza
+   * al trabajador de BullMQ. Sin él la ruta responde 400 y queda inutilizable,
+   * que es el comportamiento correcto: mejor apagada que abierta.
+   */
+  SECRETO_MANTENIMIENTO: z.string().min(16).optional(),
+
+  // La IA es opcional a propósito. Con IA_PROVEEDOR en 'ninguno' la API acepta
+  // reportes igual y simplemente no los enriquece: la extracción automática es
+  // una comodidad, no un requisito para recibir un pedido de auxilio.
+  //
+  //   ollama     → modelo local, gratis, los datos no salen de la máquina
+  //   compatible → cualquier API con forma OpenAI (Groq, OpenRouter, vLLM…)
+  //   anthropic  → API de Anthropic
+  IA_PROVEEDOR: z.enum(['ninguno', 'ollama', 'compatible', 'anthropic']).default('ninguno'),
+
+  IA_MODELO: z.string().default('qwen2.5:latest'),
+  IA_MAX_TOKENS: z.coerce.number().int().positive().default(600),
+
+  /**
+   * Un modelo local en CPU tarda decenas de segundos por reporte. El límite es
+   * alto a propósito: la extracción corre en un trabajador en segundo plano, no
+   * en el camino de la petición del ciudadano.
+   */
+  IA_TIEMPO_LIMITE_MS: z.coerce.number().int().positive().default(180_000),
+
+  /**
+   * ¿Puede el modelo escribir los campos canónicos del reporte sin que una
+   * persona revise?
+   *
+   * Por defecto NO. La medición sobre qwen2.5:7b en CPU (docs/ia-local.md) dio
+   * conteos explícitos correctos y cero cifras inventadas, pero se equivocó en
+   * `requiere_rescate` y en distinguir "atrapado" de "se quedó sin vivienda",
+   * con confianza ALTA. Esos campos ordenan la cola de rescate. Con esto en
+   * false la propuesta se guarda, se muestra en el tablero, y la aplica un
+   * operador con un clic.
+   */
+  IA_APLICAR_AUTOMATICAMENTE: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((valor) => valor === 'true'),
+
+  // Ollama
+  OLLAMA_URL: z.string().default('http://localhost:11434'),
+
+  // API con forma OpenAI
+  IA_URL_COMPATIBLE: z.string().default('https://api.groq.com/openai/v1'),
+  IA_CLAVE_COMPATIBLE: z.string().optional(),
+
+  // Anthropic
   ANTHROPIC_API_KEY: z.string().optional(),
-  IA_MODELO: z.string().default('claude-opus-5'),
-  IA_MAX_TOKENS: z.coerce.number().int().positive().default(2048),
+
   // Píxeles del lado largo a los que la PWA reduce cada foto antes de subirla.
   // Se define acá para que cliente y servidor compartan el mismo número.
   IA_IMAGEN_LADO_MAX: z.coerce.number().int().positive().default(1568),
@@ -42,5 +90,14 @@ if (!analisis.success) {
 
 export const config = analisis.data;
 
-/** ¿Hay extracción automática disponible en esta instancia? */
-export const iaHabilitada = Boolean(config.ANTHROPIC_API_KEY);
+/** ¿Hay extracción automática configurada en esta instancia? */
+export const iaHabilitada = config.IA_PROVEEDOR !== 'ninguno';
+
+// Aviso temprano de una combinación que no va a funcionar: es mejor verlo al
+// arrancar que descubrirlo cuando el primer reporte falle en la cola.
+if (config.IA_PROVEEDOR === 'anthropic' && !config.ANTHROPIC_API_KEY) {
+  console.warn('IA_PROVEEDOR=anthropic pero falta ANTHROPIC_API_KEY: la extracción no va a funcionar.');
+}
+if (config.IA_PROVEEDOR === 'compatible' && !config.IA_CLAVE_COMPATIBLE) {
+  console.warn('IA_PROVEEDOR=compatible pero falta IA_CLAVE_COMPATIBLE: la extracción no va a funcionar.');
+}

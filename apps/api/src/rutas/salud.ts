@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { bd } from '../db/pool.ts';
 import { iaHabilitada, config } from '../config.ts';
+import { obtenerProveedor } from '../servicios/ia/proveedores.ts';
 
 /**
  * Sondas de salud.
@@ -44,11 +45,22 @@ export async function rutasSalud(app: FastifyInstance): Promise<void> {
     }
 
     // La IA no cuenta para el estado de "listo": es una comodidad, no un
-    // requisito para recibir reportes. Se informa y ya.
-    comprobaciones.extraccion_ia = {
-      ok: true,
-      detalle: iaHabilitada ? `habilitada (${config.IA_MODELO})` : 'deshabilitada: sin ANTHROPIC_API_KEY',
-    };
+    // requisito para recibir reportes. Se informa con detalle porque un
+    // proveedor mal configurado —el modelo sin descargar, Ollama apagado— es
+    // silencioso de otra forma: los reportes entran y nunca se enriquecen.
+    if (!iaHabilitada) {
+      comprobaciones.extraccion_ia = { ok: true, detalle: 'deshabilitada (IA_PROVEEDOR=ninguno)' };
+    } else {
+      const proveedor = obtenerProveedor();
+      const alcanzable = proveedor ? await proveedor.disponible() : false;
+      comprobaciones.extraccion_ia = {
+        ok: true,
+        detalle:
+          `${config.IA_PROVEEDOR} · ${config.IA_MODELO} · ` +
+          `${alcanzable ? 'alcanzable' : 'NO alcanzable'} · ` +
+          `aplica sin revisión: ${proveedor?.confiableParaAplicar ? 'sí' : 'no'}`,
+      };
+    }
 
     const todoBien = Object.values(comprobaciones).every((c) => c.ok);
     return respuesta.code(todoBien ? 200 : 503).send({

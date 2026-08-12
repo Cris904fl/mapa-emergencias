@@ -1,18 +1,20 @@
-import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
-import { config } from '../../config.ts';
-import { obtenerClienteIa, describirErrorIa } from './cliente.ts';
+import { obtenerProveedor } from './proveedores.ts';
 
 /**
  * Etiquetado preliminar de fotos.
  *
  * Frontera que este módulo no cruza: describe lo que se ve, no dictamina.
  * "Se observan grietas en un muro" es una observación; "el edificio va a
- * colapsar" es un juicio estructural que requiere un ingeniero en sitio y que
- * un modelo mirando una foto no puede hacer. Las etiquetas van a
- * `medios_reporte.etiquetas_ia`, una columna que ninguna consulta de
- * priorización lee: son una ayuda para que un operador decida a qué foto
- * mirar primero, nada más.
+ * colapsar" es un juicio estructural que requiere un ingeniero en sitio y que un
+ * modelo mirando una foto no puede hacer. Las etiquetas van a
+ * `medios_reporte.etiquetas_ia`, una columna que ninguna consulta de priorización
+ * lee: son una ayuda para que un operador decida a qué foto mirar primero.
+ *
+ * Requiere un modelo multimodal. Con Ollama, `qwen2.5:latest` NO lo es — hay que
+ * bajar uno con visión (`gemma3:4b`, `qwen2.5vl:7b`, `llava`) y ponerlo en
+ * IA_MODELO_IMAGEN. Si el modelo no soporta imágenes, el trabajador registra el
+ * fallo y sigue: el reporte no se pierde por eso.
  */
 
 export const VERSION_PROMPT_IMAGEN = 'imagen-v1';
@@ -20,7 +22,16 @@ export const VERSION_PROMPT_IMAGEN = 'imagen-v1';
 const TIPOS_MIME_SOPORTADOS = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
 type TipoMimeSoportado = (typeof TIPOS_MIME_SOPORTADOS)[number];
 
+/**
+ * Igual que en la extracción de texto, el orden de los campos importa: la
+ * descripción en prosa va primero para que el modelo mire y describa antes de
+ * comprometerse con los booleanos.
+ */
 export const EsquemaEtiquetasImagen = z.object({
+  descripcion: z.string().describe('Dos frases como máximo, descriptivas y sin conclusiones.'),
+  legible: z
+    .boolean()
+    .describe('false si la foto está demasiado oscura, borrosa o cortada para describirla.'),
   elementos_visibles: z
     .array(z.string())
     .describe('Lista corta de lo que efectivamente se ve, en sustantivos simples.'),
@@ -28,7 +39,7 @@ export const EsquemaEtiquetasImagen = z.object({
     .number()
     .int()
     .min(0)
-    .describe('Cuántas personas se distinguen. 0 si no se distingue ninguna.'),
+    .describe('Cuántas personas se distinguen con claridad. 0 si no se distingue ninguna.'),
   agua_visible: z.boolean(),
   fuego_o_humo_visible: z.boolean(),
   escombros_visibles: z.boolean(),
@@ -36,10 +47,6 @@ export const EsquemaEtiquetasImagen = z.object({
   danio_edificacion_visible: z
     .boolean()
     .describe('Si se aprecia daño en una edificación, sin juzgar su gravedad.'),
-  legible: z
-    .boolean()
-    .describe('false si la foto está demasiado oscura, borrosa o cortada para describirla.'),
-  descripcion: z.string().describe('Dos frases como máximo, descriptivas y sin conclusiones.'),
 });
 
 export type EtiquetasImagen = z.infer<typeof EsquemaEtiquetasImagen>;
@@ -49,7 +56,8 @@ const INSTRUCCIONES = `Describes fotografías enviadas por ciudadanos durante un
 Tu tarea es describir, no dictaminar.
 
 Qué sí hacer
-- Enumerar lo que se ve: agua, escombros, humo, grietas, personas, vehículos, vías, postes caídos.
+- Empieza por "descripcion": dos frases como máximo sobre qué muestra la foto.
+- Enumerar en elementos_visibles lo que se ve: agua, escombros, humo, grietas, personas, vehículos, vías, postes caídos.
 - Contar personas solo si se distinguen. Si hay un bulto que podría ser alguien, no lo cuentes y dilo en la descripción.
 - Marcar legible en false cuando la foto esté muy oscura, borrosa, desenfocada o tan recortada que no se entienda qué muestra. Es una respuesta útil: le ahorra tiempo al operador.
 
@@ -80,20 +88,29 @@ function esTipoMimeSoportado(tipo: string): tipo is TipoMimeSoportado {
 /**
  * Etiqueta una imagen ya almacenada.
  *
- * `bytes` llega tal como se guardó. El redimensionado se hace en la PWA antes
- * de subir (ver apps/web/src/lib/imagen.ts): además de reducir tokens, ahorra
- * datos en la red degradada del cliente, que es donde el ahorro importa.
+ * `bytes` llega tal como se guardó. El redimensionado se hace en la PWA antes de
+ * subir (apps/web/src/lib/imagen.ts): además de reducir tokens, ahorra datos en
+ * la red degradada del cliente, que es donde el ahorro importa.
  */
 export async function etiquetarImagen(
   bytes: Buffer,
   tipoMime: string,
 ): Promise<ResultadoEtiquetado> {
-  const cliente = obtenerClienteIa();
-  if (!cliente) {
+  const proveedor = obtenerProveedor();
+  if (!proveedor) {
     return {
       ok: false,
-      motivo: 'No hay ANTHROPIC_API_KEY configurada',
+      motivo: 'IA_PROVEEDOR está en "ninguno"',
       clase: 'deshabilitada',
+      reintentable: false,
+    };
+  }
+
+  if (!proveedor.soportaImagenes) {
+    return {
+      ok: false,
+      motivo: `El proveedor ${proveedor.nombre} no soporta imágenes`,
+      clase: 'sin_soporte_imagenes',
       reintentable: false,
     };
   }
@@ -101,72 +118,29 @@ export async function etiquetarImagen(
   if (!esTipoMimeSoportado(tipoMime)) {
     return {
       ok: false,
-      motivo: `Tipo de imagen no soportado por el modelo: ${tipoMime}`,
+      motivo: `Tipo de imagen no soportado: ${tipoMime}`,
       clase: 'mime_no_soportado',
       reintentable: false,
     };
   }
 
-  const inicio = Date.now();
+  const resultado = await proveedor.inferir({
+    esquema: EsquemaEtiquetasImagen,
+    nombreEsquema: 'etiquetas_imagen',
+    instrucciones: INSTRUCCIONES,
+    entrada: 'Describe esta fotografía siguiendo tus instrucciones.',
+    imagen: { base64: bytes.toString('base64'), tipoMime },
+  });
 
-  try {
-    const mensaje = await cliente.beta.messages.parse({
-      model: config.IA_MODELO,
-      max_tokens: config.IA_MAX_TOKENS,
-      system: [
-        {
-          type: 'text',
-          text: INSTRUCCIONES,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          // La imagen va antes del texto: es el orden que recomienda la
-          // documentación de Anthropic para entradas multimodales.
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: tipoMime,
-                data: bytes.toString('base64'),
-              },
-            },
-            { type: 'text', text: 'Describe esta fotografía siguiendo tus instrucciones.' },
-          ],
-        },
-      ],
-      output_format: betaZodOutputFormat(EsquemaEtiquetasImagen),
-    });
+  if (!resultado.ok) return resultado;
 
-    const etiquetas = mensaje.parsed_output;
-    if (!etiquetas) {
-      return {
-        ok: false,
-        motivo: `El modelo no devolvió una salida analizable (stop_reason: ${mensaje.stop_reason})`,
-        clase: 'sin_salida_estructurada',
-        reintentable: mensaje.stop_reason === 'max_tokens',
-      };
-    }
-
-    return {
-      ok: true,
-      etiquetas,
-      modelo: mensaje.model,
-      versionPrompt: VERSION_PROMPT_IMAGEN,
-      tokensEntrada: mensaje.usage.input_tokens,
-      tokensSalida: mensaje.usage.output_tokens,
-      latenciaMs: Date.now() - inicio,
-    };
-  } catch (error) {
-    const descrito = describirErrorIa(error);
-    return {
-      ok: false,
-      motivo: descrito.mensaje,
-      clase: descrito.clase,
-      reintentable: descrito.reintentable,
-    };
-  }
+  return {
+    ok: true,
+    etiquetas: resultado.datos,
+    modelo: resultado.modelo,
+    versionPrompt: VERSION_PROMPT_IMAGEN,
+    tokensEntrada: resultado.tokensEntrada,
+    tokensSalida: resultado.tokensSalida,
+    latenciaMs: resultado.latenciaMs,
+  };
 }
