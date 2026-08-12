@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { bd, enTransaccion } from '../db/pool.ts';
 import { zLatitud, zLongitud } from '../esquemas/dominio.ts';
-import { conflicto, noEncontrado, sinPermiso } from '../lib/errores.ts';
+import { conflicto, noEncontrado, sinPermiso, solicitudInvalida } from '../lib/errores.ts';
 import { validar } from '../lib/validar.ts';
 import { puedeOperar } from '../lib/auth.ts';
 import { refrescarPrioridad } from '../servicios/prioridad.ts';
@@ -46,6 +46,19 @@ const zRuta = z.object({
 const zResolver = z.object({
   nota: z.string().trim().max(1000).optional(),
   personas_atendidas: z.number().int().min(0).max(100_000).optional(),
+  /**
+   * Hora de llegada al sitio, para quien cerró sin haberla marcado.
+   *
+   * Es opcional y sin valor por defecto a propósito. Rellenarla sola con el
+   * instante del cierre parecería más completo y sería peor: un caso cerrado a
+   * los 45 minutos pudo haber llegado a los 10, y ese dato inventado
+   * envenenaría la única medición que sirve para calibrar el umbral de
+   * «asignados sin llegada». No saber es un estado válido; fingir que se sabe
+   * no lo es.
+   *
+   * Se guarda como DECLARADA, distinta de la MARCADA en su momento.
+   */
+  llego_en: z.string().datetime({ offset: true }).optional(),
 });
 
 export async function rutasCampo(app: FastifyInstance): Promise<void> {
@@ -308,11 +321,19 @@ export async function rutasCampo(app: FastifyInstance): Promise<void> {
     const cuerpo = validar(zResolver, peticion.body ?? {}, 'el cierre del caso');
     const usuarioId = peticion.sesion!.usuarioId;
 
+    // Una llegada en el futuro es un reloj mal puesto o un dedazo, y entra a la
+    // medición como un tiempo imposible. Se admite un minuto de holgura porque
+    // el reloj del celular y el del servidor no van a coincidir al segundo.
+    if (cuerpo.llego_en && Date.parse(cuerpo.llego_en) > Date.now() + 60_000) {
+      throw solicitudInvalida('La hora de llegada no puede estar en el futuro');
+    }
+
     const nota = [
       'Resuelto en campo',
       cuerpo.personas_atendidas !== undefined
         ? `${cuerpo.personas_atendidas} persona(s) atendida(s)`
         : null,
+      cuerpo.llego_en ? 'llegada declarada al cerrar' : null,
       cuerpo.nota,
     ]
       .filter(Boolean)
@@ -321,11 +342,27 @@ export async function rutasCampo(app: FastifyInstance): Promise<void> {
     const { rowCount } = await enTransaccion(
       (cliente) =>
         cliente.consultar(
-          `UPDATE reportes SET estado = 'RESUELTO'
+          // La llegada solo se escribe si no había ninguna: una hora recordada
+          // al cerrar no puede pisar la que se midió al llegar. Y solo se acepta
+          // si es posterior a la primera respuesta — el CHECK de la tabla lo
+          // exige, así que sin este filtro un dedazo tumbaría el cierre entero
+          // en vez de descartar solo el dato dudoso.
+          `UPDATE reportes
+              SET estado = 'RESUELTO',
+                  llegada_en = CASE
+                    WHEN llegada_en IS NULL
+                     AND $3::timestamptz IS NOT NULL
+                     AND (primera_respuesta_en IS NULL OR $3::timestamptz >= primera_respuesta_en)
+                    THEN $3::timestamptz ELSE llegada_en END,
+                  llegada_origen = CASE
+                    WHEN llegada_en IS NULL
+                     AND $3::timestamptz IS NOT NULL
+                     AND (primera_respuesta_en IS NULL OR $3::timestamptz >= primera_respuesta_en)
+                    THEN 'DECLARADA'::origen_llegada ELSE llegada_origen END
             WHERE id = $1
               AND responsable_id = $2
               AND estado NOT IN ('RESUELTO', 'DUPLICADO', 'DESCARTADO')`,
-          [peticion.params.id, usuarioId],
+          [peticion.params.id, usuarioId, cuerpo.llego_en ?? null],
         ),
       { usuarioId, nota },
     );

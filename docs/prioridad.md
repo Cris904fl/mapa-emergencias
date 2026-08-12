@@ -134,6 +134,15 @@ correcta.
 El umbral de 30 minutos es un punto de partida sin medir: muy corto inunda el
 mosaico en una ciudad con tráfico, muy largo lo vuelve inútil.
 
+**Por qué sigue sin medir.** Al intentar calibrarlo se descubrió que el dato no
+se estaba recogiendo: 2 de cada 5 casos cerrados nunca pasaban por
+`EN_ATENCION`, porque marcar la llegada es opcional. Eso se corrigió
+—`reportes.llegada_en` con su procedencia, y la pregunta al cerrar; ver
+[`campo.md`](campo.md)— pero el reloj de la medición empieza desde ahí. Hasta que
+haya cobertura razonable, mover el umbral sería cambiar un número inventado por
+otro. La consulta que lo dirá está en `db/queries/tiempos-de-llegada.sql` y
+reporta la cobertura antes que cualquier percentil.
+
 ## Los pesos viven en datos
 
 Tabla `pesos_prioridad`, una fila por versión, con un `CHECK` que exige que los

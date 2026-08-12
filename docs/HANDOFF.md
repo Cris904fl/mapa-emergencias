@@ -212,9 +212,10 @@ Tablero GIS (operador)          Campo (rescatista)
 ```
 db/
   migrations/   001_extensiones · 002_tipos · 003_tablas · 004_indices
-                005_prioridad · 006_triggers · 007_campo
+                005_prioridad · 006_triggers · 007_campo · 008_llegada
   seeds/        001_desarrollo.sql        (UUID fijos, idempotente)
   queries/      consultas-ejemplo.sql    (8 consultas PostGIS ejecutables)
+                tiempos-de-llegada.sql   (calibración del umbral de estancados)
 apps/api/src/
   config.ts             configuración validada con Zod
   app.ts                construcción de Fastify, plugins, manejo de errores
@@ -730,34 +731,38 @@ duplicado en el tablero.
 
 ## 11. SIGUIENTE PASO
 
-**Calibrar el umbral de «asignados sin llegada» con tiempos reales, y decidir si
-merece un término propio en el índice.**
+**Esperar a que haya cobertura de horas de llegada. Mientras tanto, el etiquetado
+de fotos.**
 
-La deuda técnica con impacto real quedó en cero: el bundle está partido (entrada
-de **1 303 kB a 243 kB**, 76 kB gzip), `GET /v1/campo/personal` dibuja al personal
-con la antigüedad de su posición, y las asignaciones estancadas ya tienen alerta.
+La deuda técnica con impacto real está en cero: el bundle está partido (entrada
+de **1 303 kB a 244 kB**, 77 kB gzip), `GET /v1/campo/personal` dibuja al personal
+con la antigüedad de su posición, las asignaciones estancadas tienen alerta, y la
+hora de llegada ya se recoge con su procedencia.
 
-Lo que queda de esa última es la mitad de fondo. Hoy el mosaico avisa, pero el
-reporte estancado **sigue sin volver a subir en la cola**: depende de que un
-operador mire el tablero. Y el umbral de 30 minutos se eligió a ojo — muy corto
-inunda el mosaico en una ciudad con tráfico, muy largo lo vuelve inútil.
+Se intentó calibrar el umbral de 30 minutos y **no se pudo**, por una razón que
+vale la pena no olvidar: el dato no se estaba recogiendo. 2 de cada 5 casos
+cerrados nunca pasaban por `EN_ATENCION`. Eso ya está corregido (migración 008 y
+la pregunta al cerrar), pero el reloj empieza desde ahí — hoy la cobertura es del
+43 % y son 3 datos, dos de ellos de 0.0 minutos porque salieron de clics
+seguidos en una sesión de pruebas.
 
-Cómo, en orden:
+Qué hacer, en orden:
 
-1. **Medir.** Con la bitácora ya se puede: `historial_estado_reporte` tiene el
-   paso a `ASIGNADO` y el paso a `EN_ATENCION`, así que la distribución real de
-   tiempos de llegada es una consulta, no un desarrollo. Sin ese número, elegir
-   umbral o peso es adivinar.
-2. **Ajustar el umbral** en `filtros.ts` con lo que salga. Si la mediana de
-   llegada resulta ser de 50 minutos, el mosaico actual está mintiendo.
+1. **Dejar el umbral quieto** hasta que `db/queries/tiempos-de-llegada.sql`
+   reporte cobertura razonable sobre uso real. Moverlo ahora sería cambiar un
+   número inventado por otro.
+2. **Ajustar el umbral** con lo que salga, mirando la tabla de falsas alarmas de
+   esa consulta: un umbral que marca el 30 % de las llegadas normales no es una
+   alerta, es ruido que se aprende a ignorar.
 3. **Decidir el sexto término** (`tiempo_desde_asignacion`) con el dato en la
    mano. Exige una fila nueva en `pesos_prioridad` con los cinco pesos
    repartidos de nuevo para que sigan sumando 100, y volver a medir el orden
    resultante — es el invariante más delicado del sistema, y por eso no se tocó
    sin datos.
 
-**Alternativa si se prefiere algo más visible antes:** el etiquetado de fotos
-sigue sin ejecutarse nunca y solo necesita `ollama pull gemma3:4b`.
+**Mientras tanto**, lo que sí se puede hacer hoy: el etiquetado de fotos sigue
+sin ejecutarse nunca. Solo necesita `ollama pull gemma3:4b` y un `IA_MODELO` con
+visión.
 
 ---
 
@@ -892,6 +897,13 @@ llena con un toque.
 - `test/ayudas.ts` cierra las colas además del pool. Sin eso el proceso de
   pruebas no termina y el síntoma es desconcertante (la suite pasa pero el
   comando se cuelga si la salida está en una tubería).
+- **La base de pruebas se reconstruye sola cuando llega una migración nueva.**
+  `ayudas.ts` guarda la lista de archivos aplicados en `migraciones_pruebas`; si
+  no coincide con `db/migrations/`, tira el esquema y lo aplica todo de cero.
+  Antes se saltaba las migraciones si la tabla `reportes` ya existía, así que una
+  migración nueva **nunca** llegaba a las pruebas: la suite seguía verde contra
+  un esquema viejo hasta que algo fallaba con un 500 sin relación aparente. Una
+  suite verde contra un esquema desactualizado no prueba lo que dice probar.
 
 ---
 
@@ -899,10 +911,10 @@ llena con un toque.
 
 **Estado actual en una frase.** MVP funcional de punta a punta —reporte ciudadano
 offline-first, priorización auditable, triage con IA local, atención en campo con
-ruta y obstáculos, tablero con filtros cruzables— con **62 pruebas** pasando, 4
-commits en `origin/main` y tres cambios sin commit en el árbol de trabajo.
+ruta y obstáculos, tablero con filtros cruzables— con **68 pruebas** pasando, 4
+commits en `origin/main` y cuatro cambios sin commit en el árbol de trabajo.
 
-**Último cambio realizado.** Tres cambios sin commit todavía:
+**Último cambio realizado.** Cuatro cambios sin commit todavía:
 
 1. **Partición del bundle.** `componentes/Mapa.tsx` se carga con `React.lazy` +
    `<Suspense>` desde `paginas/Tablero.tsx`. La entrada pasó de **1 303 kB
@@ -917,15 +929,22 @@ commits en `origin/main` y tres cambios sin commit en el árbol de trabajo.
    de severidad. La severidad es ortogonal al filtro de KPI, se cruza con AND, y
    va a la cola **y** al GeoJSON del mapa (`GET /v1/tablero/cola` no aceptaba
    `severidad`; ahora sí).
+4. **Hora de llegada al sitio, con procedencia** (migración `008_llegada.sql`).
+   Se intentó calibrar el umbral de estancados y se descubrió que el dato no se
+   recogía: 2 de cada 5 casos cerrados nunca pasaban por `EN_ATENCION`. Ahora
+   `reportes.llegada_en` + `llegada_origen` (`MARCADA` medida al llegar /
+   `DECLARADA` recordada al cerrar), el formulario de cierre pregunta «hace
+   cuántos minutos llegó», y la consulta de calibración vive en
+   `db/queries/tiempos-de-llegada.sql`. **De paso se arregló que la base de
+   pruebas nunca recibía migraciones nuevas** — ver §13.
 
-**Próxima tarea exacta.** Medir los tiempos reales de llegada con la bitácora,
-ajustar el umbral de 30 minutos y decidir si las asignaciones estancadas merecen
-un sexto término del índice — ver §11.
+**Próxima tarea exacta.** Nada bloqueante: esperar cobertura de horas de llegada
+antes de tocar el umbral (§11). Lo accionable hoy es el etiquetado de fotos, que
+solo necesita `ollama pull gemma3:4b`.
 
 **Archivos relevantes para esa tarea.**
-`apps/api/src/esquemas/filtros.ts` (el umbral) ·
-`db/migrations/005_prioridad.sql` (la fórmula, si se llega al término propio) ·
-`docs/prioridad.md`
+`apps/api/src/servicios/ia/imagen.ts` · `apps/api/src/config.ts` (`IA_MODELO`) ·
+`docs/ia-local.md`
 
 **Bloqueos actuales.** Ninguno técnico. Dos cosas requieren decisión o insumo de
 Cristian, no de quien programa:

@@ -335,6 +335,135 @@ describe('cerrar un caso', () => {
   });
 });
 
+describe('hora de llegada al sitio', () => {
+  /**
+   * El punto de todas estas pruebas es el mismo: el dato que se va a usar para
+   * calibrar el umbral de «asignados sin llegada» tiene que decir de dónde
+   * salió, y no puede inventarse cuando falta.
+   */
+  const tomar = async (id: string) =>
+    app.inject({ method: 'POST', url: `/v1/campo/casos/${id}/tomar`, headers: conToken(tokenA) });
+
+  const llegada = async (id: string) => {
+    const { rows } = await bd.consultar<{ llegada_en: Date | null; llegada_origen: string | null }>(
+      'SELECT llegada_en, llegada_origen FROM reportes WHERE id = $1',
+      [id],
+    );
+    return rows[0]!;
+  };
+
+  it('marcar la llegada la sella como MARCADA', async () => {
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/en-atencion`,
+      headers: conToken(tokenA),
+    });
+
+    const registro = await llegada(reporte);
+    assert.equal(registro.llegada_origen, 'MARCADA');
+    assert.ok(registro.llegada_en);
+  });
+
+  it('cerrar sin decir nada no inventa una hora de llegada', async () => {
+    // Es la regla que da sentido a todo lo demás: rellenar el hueco con el
+    // instante del cierre parecería más completo y arruinaría la medición.
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/resolver`,
+      headers: conToken(tokenA),
+      payload: {},
+    });
+
+    const registro = await llegada(reporte);
+    assert.equal(registro.llegada_en, null);
+    assert.equal(registro.llegada_origen, null);
+  });
+
+  it('declararla al cerrar la guarda como DECLARADA', async () => {
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+    // El caso se tomó hace 40 minutos: sin envejecer la asignación, «llegué
+    // hace 20» sería anterior a que le asignaran el caso y se descartaría con
+    // razón. Es el escenario real —salir, llegar, cerrar— comprimido.
+    await bd.consultar(
+      `UPDATE reportes SET primera_respuesta_en = now() - interval '40 minutes' WHERE id = $1`,
+      [reporte],
+    );
+    const hace20 = new Date(Date.now() - 20 * 60_000).toISOString();
+
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/resolver`,
+      headers: conToken(tokenA),
+      payload: { llego_en: hace20 },
+    });
+
+    const registro = await llegada(reporte);
+    assert.equal(registro.llegada_origen, 'DECLARADA');
+    // Se guarda la hora declarada, no la del cierre: son 20 minutos de
+    // diferencia y es justamente lo que se quiere poder medir.
+    assert.ok(Math.abs(registro.llegada_en!.getTime() - Date.parse(hace20)) < 1000);
+  });
+
+  it('una hora declarada no pisa la que se marcó al llegar', async () => {
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/en-atencion`,
+      headers: conToken(tokenA),
+    });
+    const marcada = await llegada(reporte);
+
+    await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/resolver`,
+      headers: conToken(tokenA),
+      payload: { llego_en: new Date(Date.now() - 5 * 60_000).toISOString() },
+    });
+
+    const despues = await llegada(reporte);
+    assert.equal(despues.llegada_origen, 'MARCADA');
+    assert.equal(despues.llegada_en!.getTime(), marcada.llegada_en!.getTime());
+  });
+
+  it('rechaza una llegada en el futuro', async () => {
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+
+    const respuesta = await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/resolver`,
+      headers: conToken(tokenA),
+      payload: { llego_en: new Date(Date.now() + 30 * 60_000).toISOString() },
+    });
+
+    assert.equal(respuesta.statusCode, 400);
+  });
+
+  it('una llegada anterior a la asignación se descarta, pero el cierre sí ocurre', async () => {
+    // Un dedazo no puede impedir que alguien cierre un caso en campo. Se
+    // descarta el dato dudoso y se cierra igual.
+    const reporte = await crearReporteDirecto({ ...POSICION });
+    await tomar(reporte);
+
+    const respuesta = await app.inject({
+      method: 'POST',
+      url: `/v1/campo/casos/${reporte}/resolver`,
+      headers: conToken(tokenA),
+      payload: { llego_en: new Date(Date.now() - 48 * 3600_000).toISOString() },
+    });
+
+    assert.equal(respuesta.statusCode, 200);
+    const registro = await llegada(reporte);
+    assert.equal(registro.llegada_en, null, 'no se guarda una llegada imposible');
+  });
+});
+
 describe('ruta y obstáculos', () => {
   it('detecta las vías bloqueadas que hay sobre el trayecto', async () => {
     // Es la información que un mapa comercial no tiene: sabe las calles, pero no

@@ -245,8 +245,10 @@ export function Campo() {
                 ruta={rutaAbierta?.idCaso === caso.id ? rutaAbierta.ruta : null}
                 onRuta={() => void verRuta(caso)}
                 onEnAtencion={() => void actuar(caso.id, () => api.marcarEnAtencion(caso.id))}
-                onResolver={(nota, personas) =>
-                  void actuar(caso.id, () => api.resolverCaso(caso.id, nota, personas))
+                onResolver={(nota, personas, llegoEn) =>
+                  void actuar(caso.id, () =>
+                    api.resolverCaso(caso.id, nota, personas, llegoEn),
+                  )
                 }
                 onLiberar={() => void actuar(caso.id, () => api.liberarCaso(caso.id))}
               />
@@ -337,12 +339,25 @@ function TarjetaCaso({
   onRuta: () => void;
   onTomar?: () => void;
   onEnAtencion?: () => void;
-  onResolver?: (nota?: string, personas?: number) => void;
+  onResolver?: (nota?: string, personas?: number, llegoEn?: string) => void;
   onLiberar?: () => void;
 }) {
   const [cerrando, setCerrando] = useState(false);
   const [nota, setNota] = useState('');
   const [personas, setPersonas] = useState('');
+  /**
+   * Minutos desde que llegó al sitio, para quien cierra sin haber marcado la
+   * llegada en su momento.
+   *
+   * Se pregunta en minutos y no como una hora del reloj porque es lo que
+   * alguien puede contestar de memoria y con afán: «llegué hace veinte» sale
+   * solo, «llegué a las 14:35» hay que calcularlo. De paso evita el lío de la
+   * medianoche y el del huso horario.
+   *
+   * Arranca vacío a propósito. Un valor por defecto se aceptaría sin leerlo y
+   * quedaría registrado como si fuera un dato real.
+   */
+  const [minutosLlegada, setMinutosLlegada] = useState('');
 
   const tomadoPorOtro = caso.responsable_id !== null && !caso.es_mio;
 
@@ -495,10 +510,20 @@ function TarjetaCaso({
           onSubmit={(evento) => {
             evento.preventDefault();
             const n = Number.parseInt(personas, 10);
-            onResolver(nota.trim() || undefined, Number.isFinite(n) ? n : undefined);
+            const minutos = Number.parseInt(minutosLlegada, 10);
+            const llegoEn =
+              Number.isFinite(minutos) && minutos >= 0
+                ? new Date(Date.now() - minutos * 60_000).toISOString()
+                : undefined;
+            onResolver(
+              nota.trim() || undefined,
+              Number.isFinite(n) ? n : undefined,
+              llegoEn,
+            );
             setCerrando(false);
             setNota('');
             setPersonas('');
+            setMinutosLlegada('');
           }}
         >
           <label>
@@ -511,6 +536,28 @@ function TarjetaCaso({
               onChange={(e) => setPersonas(e.target.value)}
             />
           </label>
+
+          {/* Solo se pregunta si no marcó la llegada en su momento: al que ya la
+              marcó no hay que hacerle repetir un dato que el sistema tiene, y
+              además el servidor no lo sobreescribiría. */}
+          {caso.estado !== 'EN_ATENCION' && (
+            <label>
+              Hace cuántos minutos llegó al sitio <span className="opcional">opcional</span>
+              <input
+                type="number"
+                min="0"
+                max="1440"
+                inputMode="numeric"
+                value={minutosLlegada}
+                onChange={(e) => setMinutosLlegada(e.target.value)}
+                placeholder="Ej: 20"
+              />
+              <small className="nota-campo">
+                Si no alcanzó a marcar la llegada, anótela acá. Déjelo vacío si no lo
+                recuerda: es mejor que quede sin dato a que quede uno inventado.
+              </small>
+            </label>
+          )}
           <label>
             Qué pasó
             <textarea

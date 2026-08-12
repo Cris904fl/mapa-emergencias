@@ -342,9 +342,19 @@ export const api = {
   marcarEnAtencion: (idCaso: string) =>
     pedir<{ estado: string }>(`/v1/campo/casos/${idCaso}/en-atencion`, { method: 'POST' }),
 
-  resolverCaso: (idCaso: string, nota?: string, personas_atendidas?: number) =>
+  /**
+   * `llego_en` es ISO y opcional: se manda solo si el rescatista lo anotó al
+   * cerrar. Se omite —y no se rellena con el instante del cierre— porque un dato
+   * inventado arruina la medición del tiempo de llegada.
+   */
+  resolverCaso: (
+    idCaso: string,
+    nota?: string,
+    personas_atendidas?: number,
+    llego_en?: string,
+  ) =>
     pedir<{ estado: string; nota: string }>(`/v1/campo/casos/${idCaso}/resolver`, {
       method: 'POST',
-      body: JSON.stringify({ nota, personas_atendidas }),
+      body: JSON.stringify({ nota, personas_atendidas, llego_en }),
     }),
 };

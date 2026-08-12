@@ -52,22 +52,55 @@ export async function asegurarBaseDePruebas(): Promise<void> {
   await aplicarMigraciones();
 }
 
+/**
+ * Reconstruye el esquema de pruebas cuando la lista de migraciones cambió.
+ *
+ * La versión anterior se saltaba las migraciones si la tabla `reportes` ya
+ * existía. Eso hacía que una migración nueva **nunca** llegara a la base de
+ * pruebas: la suite seguía corriendo contra el esquema viejo y fallaba con
+ * errores que no tenían nada que ver con la causa —un 500 al cerrar un caso
+ * porque faltaba una columna—. Y lo hacía en silencio, que es lo peor: una
+ * suite verde contra un esquema desactualizado no prueba lo que dice probar.
+ *
+ * Ahora se guarda la lista de archivos aplicados y, si no coincide con la del
+ * directorio, se tira el esquema entero y se vuelve a aplicar todo. La base de
+ * pruebas es desechable, así que reconstruirla es la respuesta correcta y no
+ * hace falta el registro con hash del corredor de producción.
+ */
 async function aplicarMigraciones(): Promise<void> {
   const archivos = (await readdir(directorioMigraciones))
     .filter((nombre) => nombre.endsWith('.sql'))
     .sort();
+  const huella = archivos.join(',');
 
-  // Se detecta por una tabla del esquema en lugar de llevar registro: la base
-  // de pruebas es desechable y reconstruirla entera es lo más simple.
-  const { rows } = await bd.consultar<{ existe: boolean }>(
-    `SELECT to_regclass('public.reportes') IS NOT NULL AS existe`,
+  // La existencia se comprueba en una consulta aparte y no con un CASE:
+  // Postgres planifica la subconsulta aunque su rama no se ejecute, así que un
+  // `CASE WHEN to_regclass(...) IS NULL` falla igual cuando la tabla no está.
+  const { rows: presencia } = await bd.consultar<{ hay: boolean }>(
+    `SELECT to_regclass('public.migraciones_pruebas') IS NOT NULL AS hay`,
   );
-  if (rows[0]?.existe) return;
+
+  if (presencia[0]?.hay) {
+    const { rows } = await bd.consultar<{ huella: string }>(
+      'SELECT huella FROM migraciones_pruebas LIMIT 1',
+    );
+    if (rows[0]?.huella === huella) return;
+  }
+
+  // Seguro es: `asegurarBaseDePruebas` ya verificó que la base termina en
+  // `_test` antes de llamar acá. Se lleva por delante las extensiones también,
+  // pero 001_extensiones.sql las vuelve a crear.
+  await bd.consultar('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
 
   for (const nombre of archivos) {
     const sql = await readFile(path.join(directorioMigraciones, nombre), 'utf8');
     await bd.consultar(sql);
   }
+
+  // En dos llamadas y no en una: con parámetros el driver usa el protocolo
+  // extendido, que admite una sola sentencia por consulta.
+  await bd.consultar('CREATE TABLE migraciones_pruebas (huella text NOT NULL)');
+  await bd.consultar('INSERT INTO migraciones_pruebas (huella) VALUES ($1)', [huella]);
 }
 
 /**

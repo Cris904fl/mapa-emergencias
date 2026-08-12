@@ -258,6 +258,54 @@ cifra, que es correcto: vuelve a estar disponible y la cola lo recoge.
 Por qué una alerta y no un sexto término del índice: ver
 [`prioridad.md`](prioridad.md).
 
+### La hora de llegada, y por qué se guarda de dónde salió
+
+Al intentar calibrar el umbral de 30 minutos apareció un problema más de fondo:
+**el dato no se estaba recogiendo**. `resolver` acepta un caso directo desde
+`ASIGNADO`, así que marcar la llegada es opcional — y en la primera medición, 2
+de cada 5 casos cerrados nunca habían pasado por `EN_ATENCION`. El rescatista
+termina y cierra desde el celular sin acordarse del botón intermedio, que es el
+comportamiento natural, no un descuido. Esperar más tiempo no lo arregla: lo que
+estaba roto era el instrumento, no la muestra.
+
+La solución **no** podía ser rellenar el hueco con el instante del cierre. Un
+caso cerrado a los 45 minutos pudo haber llegado a los 10, así que ese relleno
+contaminaría justo la métrica que se quiere medir.
+
+Lo que se hizo (migración `008_llegada.sql`):
+
+- `reportes.llegada_en` — cuándo llegó. `NULL` significa **no se sabe**, que es
+  distinto de cero y hay que poder distinguirlo.
+- `reportes.llegada_origen` — cómo se supo:
+  - `MARCADA`: la selló el trigger al pasar a `EN_ATENCION`. Es una medición.
+  - `DECLARADA`: la escribió el rescatista al cerrar. Es un recuerdo.
+
+Es la misma decisión que ya había tomado `origen_triage` para los conteos: un
+número que se va a usar para decidir tiene que decir de dónde salió. Al calibrar,
+las dos sirven, pero no valen lo mismo — una hora recordada tiende a redondearse
+a números cómodos.
+
+El formulario de cierre pregunta **«hace cuántos minutos llegó»**, no una hora
+del reloj: es lo que alguien puede contestar de memoria y con afán —«llegué hace
+veinte» sale solo, «llegué a las 14:35» hay que calcularlo— y de paso evita el
+lío de la medianoche y el del huso horario. Solo aparece si el caso no pasó por
+`EN_ATENCION`, y **arranca vacío**: un valor por defecto se aceptaría sin leerlo
+y quedaría registrado como si fuera real.
+
+Dos reglas que protegen el dato:
+
+- Una hora declarada **nunca** pisa una marcada.
+- Una llegada anterior a la asignación o en el futuro se descarta — pero el
+  cierre ocurre igual. Un dedazo no puede impedir que alguien cierre un caso en
+  campo.
+
+La consulta de calibración vive en
+[`db/queries/tiempos-de-llegada.sql`](../db/queries/tiempos-de-llegada.sql). Lo
+primero que reporta es la **cobertura**, a propósito: si la mayoría de los casos
+no tiene hora, los percentiles se calculan sobre los pocos que la anotaron, que
+no son una muestra al azar. Con cobertura baja, el resultado correcto es
+«todavía no se puede calibrar».
+
 ### Filtro por severidad
 
 La leyenda del mapa hace doble oficio: explica el color y filtra por él. Es donde
