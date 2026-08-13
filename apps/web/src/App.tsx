@@ -4,6 +4,15 @@ import { Tablero } from './paginas/Tablero.tsx';
 import { Campo } from './paginas/Campo.tsx';
 import { iniciarSincronizacionAutomatica } from './lib/bandeja.ts';
 import { hayVersionNueva } from './lib/version.ts';
+import {
+  ETIQUETAS,
+  alCambiarElSistema,
+  aplicar,
+  guardar,
+  siguiente,
+  temaGuardado,
+  type Tema,
+} from './lib/tema.ts';
 
 /**
  * Cada cuánto se pregunta si hay una versión nueva desplegada.
@@ -32,6 +41,27 @@ export function App() {
   const [vista, setVista] = useState<Vista>(vistaInicial);
   const [enLinea, setEnLinea] = useState(navigator.onLine);
   const [versionVieja, setVersionVieja] = useState(false);
+
+  /**
+   * El tema arranca de lo guardado, no de un valor por defecto: el script en
+   * línea de `index.html` ya lo aplicó antes de pintar, así que leer lo mismo acá
+   * deja al botón mostrando el estado real desde el primer instante.
+   */
+  const [tema, setTema] = useState<Tema>(temaGuardado);
+
+  // Repintar cuando el sistema cambia de tema, pero solo mientras nadie haya
+  // elegido a mano: a quien puso «claro» no se le cambia la pantalla al
+  // atardecer.
+  useEffect(() => {
+    if (tema !== 'sistema') return;
+    return alCambiarElSistema(() => aplicar('sistema'));
+  }, [tema]);
+
+  function cambiarTema() {
+    const nuevo = siguiente(tema);
+    setTema(nuevo);
+    guardar(nuevo);
+  }
 
   // El sincronizador arranca una sola vez, a nivel de aplicación: es un proceso
   // de fondo que debe seguir corriendo aunque el usuario cambie de vista.
@@ -125,6 +155,24 @@ export function App() {
             {opcion.etiqueta}
           </button>
         ))}
+
+        {/* El tema, al otro extremo de la barra.
+            Lejos de las tres secciones a propósito: es un ajuste, no una parte
+            del trabajo, y en la pantalla del ciudadano no debe competir con
+            «Enviar reporte». Un solo botón que rota entre automático, claro y
+            oscuro — el nombre del estado va en el texto accesible y no en un
+            icono suelto, porque un sol y una luna no dicen cuál de los dos está
+            activo ni que exista el automático. */}
+        <button
+          type="button"
+          className="boton-tema"
+          onClick={cambiarTema}
+          title={`Tema: ${ETIQUETAS[tema].nombre}. Toque para cambiar.`}
+          aria-label={`Tema ${ETIQUETAS[tema].nombre}. Toque para cambiar.`}
+        >
+          <span aria-hidden="true">{ETIQUETAS[tema].icono}</span>
+          <span className="nombre-tema">{ETIQUETAS[tema].nombre}</span>
+        </button>
       </nav>
 
       <main>

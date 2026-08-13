@@ -115,71 +115,76 @@
 
 /* ------------------------------------------------------------ tema oscuro
  *
- * Sigue al sistema operativo y no hay interruptor. En un celular el tema ya
- * cambia solo al anochecer, que es justo cuando importa: la pantalla al máximo
- * en una zona sin luz arruina la visión nocturna de quien va a atender, y
- * gasta batería que en una emergencia no se recupera. Un interruptor propio
- * añadiría un control a las tres pantallas y un estado que guardar, para
- * decidir algo que el teléfono ya sabe.
+ * Se activa por el atributo `data-tema` de <html>, no por `prefers-color-scheme`.
+ *
+ * La media query sería lo natural y aquí está mal: con un botón que puede elegir
+ * claro, un sistema operativo en oscuro seguiría aplicando esta paleta y le
+ * ganaría a la elección de la persona. Quien resuelve las tres posibilidades
+ * —automático, claro, oscuro— es un script en línea de `index.html` que escribe
+ * el atributo **antes del primer pintado**, y `src/lib/tema.ts` cuando alguien
+ * toca el botón. El CSS solo obedece al atributo.
+ *
+ * Que el valor inicial lo escriba un script en línea y no este archivo es lo que
+ * evita el destello blanco en cada carga: sin él el navegador dibuja la página
+ * en claro y la corrige después, y de noche eso es un fogonazo en la cara de
+ * quien va a atender.
  *
  * `color-scheme` no es decorativo: sin él los campos de texto, los desplegables
  * y las barras de desplazamiento los sigue pintando el navegador en claro, y
  * quedan parches blancos en medio de todo lo demás.
  */
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
 
-    --tinta: #e8eef7;
-    --tinta-suave: #b9c6d8;
-    --tenue: #8fa0b8;
-    --linea: #2b3648;
-    --fondo: #0d1320;
-    --superficie: #161e2e;
+  --tinta: #e8eef7;
+  --tinta-suave: #b9c6d8;
+  --tenue: #8fa0b8;
+  --linea: #2b3648;
+  --fondo: #0d1320;
+  --superficie: #161e2e;
 
-    --fondo-hundido: #111827;
-    --realce: #2b3648;
+  --fondo-hundido: #111827;
+  --realce: #2b3648;
 
-    /* Más claro que el fondo, no más oscuro: en claro este relleno resalta por
-       ser oscuro sobre blanco, así que en oscuro tiene que resaltar por ser
-       claro sobre negro. Mantiene el texto blanco. */
-    --relleno: #33405a;
+  /* Más claro que el fondo, no más oscuro: en claro este relleno resalta por
+     ser oscuro sobre blanco, así que en oscuro tiene que resaltar por ser
+     claro sobre negro. Mantiene el texto blanco. */
+  --relleno: #33405a;
 
-    --acento: #fb923c;
-    --acento-claro: #2c1a0f;
-    --acento-fuerte: #fdba74;
+  --acento: #fb923c;
+  --acento-claro: #2c1a0f;
+  --acento-fuerte: #fdba74;
 
-    --alarma: #f87171;
-    --aviso: #fbbf24;
-    --bien: #4ade80;
-    --info: #60a5fa;
+  --alarma: #f87171;
+  --aviso: #fbbf24;
+  --bien: #4ade80;
+  --info: #60a5fa;
 
-    --fondo-alarma: #2a1416;
-    --linea-alarma: #5b1d1d;
-    --fondo-aviso: #2a2110;
-    --linea-aviso: #5c4410;
-    --fondo-bien: #0f2419;
-    --linea-bien: #1d5236;
+  --fondo-alarma: #2a1416;
+  --linea-alarma: #5b1d1d;
+  --fondo-aviso: #2a2110;
+  --linea-aviso: #5c4410;
+  --fondo-bien: #0f2419;
+  --linea-bien: #1d5236;
 
-    --ia-fondo: #241a3d;
-    --ia-texto: #c4b5fd;
-    --ia-linea: #4c3a86;
+  --ia-fondo: #241a3d;
+  --ia-texto: #c4b5fd;
+  --ia-linea: #4c3a86;
 
-    --tenue-superpuesto: rgb(255 255 255 / 10%);
-    --tenue-hover: rgb(255 255 255 / 9%);
-    --tenue-separador: rgb(255 255 255 / 14%);
-    --velo-panel: rgb(13 19 32 / 94%);
+  --tenue-superpuesto: rgb(255 255 255 / 10%);
+  --tenue-hover: rgb(255 255 255 / 9%);
+  --tenue-separador: rgb(255 255 255 / 14%);
+  --velo-panel: rgb(13 19 32 / 94%);
 
-    --sev-critica: #f87171;
-    --sev-alta: #fb923c;
-    --sev-media: #facc15;
-    --sev-baja: #a3e635;
-    --sev-desconocida: #8fa0b8;
+  --sev-critica: #f87171;
+  --sev-alta: #fb923c;
+  --sev-media: #facc15;
+  --sev-baja: #a3e635;
+  --sev-desconocida: #8fa0b8;
 
-    /* Una sombra negra sobre un fondo casi negro no se ve: lo que separa una
-       tarjeta del fondo en este tema es su borde, así que la sombra solo apoya. */
-    --sombra: 0 1px 2px rgb(0 0 0 / 45%), 0 4px 12px rgb(0 0 0 / 30%);
-  }
+  /* Una sombra negra sobre un fondo casi negro no se ve: lo que separa una
+   tarjeta del fondo en este tema es su borde, así que la sombra solo apoya. */
+  --sombra: 0 1px 2px rgb(0 0 0 / 45%), 0 4px 12px rgb(0 0 0 / 30%);
 }
 
 * {
@@ -281,6 +286,31 @@ code {
 .navegacion button.activa {
   background: var(--fondo);
   color: var(--tinta);
+}
+
+/* El botón del tema: `margin-left: auto` lo manda al extremo opuesto de la barra
+   sin necesitar un contenedor extra. En pantallas estrechas el nombre del estado
+   se esconde y queda el icono, que es lo que cabe al lado de tres secciones. */
+.navegacion .boton-tema {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: var(--radio);
+  font-size: 0.9rem;
+}
+
+.navegacion .boton-tema span[aria-hidden='true'] {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+@media (max-width: 560px) {
+  .navegacion .boton-tema .nombre-tema {
+    /* Se oculta a la vista, no para el lector de pantalla: el botón ya lleva
+       `aria-label` con el estado, así que aquí basta con no dibujarlo. */
+    display: none;
+  }
 }
 
 main {

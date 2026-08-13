@@ -16,6 +16,37 @@
     <link rel="icon" href="/icono.svg" type="image/svg+xml" />
   </head>
   <body>
+    <!--
+      El tema se escribe antes de pintar, no cuando React arranca.
+
+      El CSS solo mira `data-tema` en <html>. Si esperáramos a que el módulo
+      cargue, el navegador ya habría dibujado la página con el tema claro y
+      habría un destello blanco en cada carga — de noche, en la pantalla de
+      alguien que va a atender, es un fogonazo.
+
+      Duplica a propósito la lógica de src/lib/tema.ts: allá vive la versión
+      completa, con la rueda del botón y lo que se guarda. Acá solo hace falta
+      resolver el valor inicial, y tiene que ser un script en línea y sin
+      dependencias para correr antes del primer pintado. Si cambia el nombre de
+      la llave o del atributo, hay que cambiarlo en los dos sitios.
+    -->
+    <script>
+      (function () {
+        var elegido = null;
+        try {
+          elegido = localStorage.getItem('tema');
+        } catch (e) {
+          /* modo privado: se sigue al sistema */
+        }
+        var tema =
+          elegido === 'claro' || elegido === 'oscuro'
+            ? elegido
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'oscuro'
+              : 'claro';
+        document.documentElement.dataset.tema = tema;
+      })();
+    </script>
     <div id="raiz"></div>
     <noscript>
       Esta aplicación necesita JavaScript. Si no puede activarlo, llame a la línea 123.
