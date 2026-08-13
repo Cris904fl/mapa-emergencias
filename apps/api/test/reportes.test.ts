@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { construirApp } from '../src/app.ts';
 import { bd } from '../src/db/pool.ts';
+import { config } from '../src/config.ts';
+import { colasHabilitadas, encolarTriage } from '../src/trabajadores/colas.ts';
 import {
   asegurarBaseDePruebas,
   cerrar,
@@ -364,5 +366,59 @@ describe('explicación de la prioridad', () => {
       url: '/v1/reportes/00000000-0000-4000-8000-000000000000/prioridad',
     });
     assert.equal(respuesta.statusCode, 404);
+  });
+});
+
+describe('alta de reportes sin Redis', () => {
+  /**
+   * El fallo que este bloque fija por escrito casi arruina el primer
+   * despliegue: con REDIS_URL apuntando a un Redis inexistente, el alta de un
+   * reporte se quedaba colgada para siempre y el proceso se moría.
+   *
+   * Eran dos cosas sumadas. `maxRetriesPerRequest: null` —que BullMQ exige—
+   * hace que ioredis reintente sin límite, así que `add()` no se resolvía ni se
+   * rechazaba y el `await` de la ruta esperaba indefinidamente; el `.catch()`
+   * que la ruta ya tenía no servía de nada porque nunca hubo un rechazo. Y por
+   * debajo, la conexión de ioredis no tenía oyente de `error`, lo que convierte
+   * cada intento fallido en una excepción no capturada que tumba el servidor.
+   *
+   * La regla que queda fijada: **recibir un reporte no puede depender de Redis**.
+   */
+  it('acepta un reporte con descripción aunque las colas estén apagadas', async () => {
+    const original = config.REDIS_URL;
+    (config as { REDIS_URL: string }).REDIS_URL = '';
+
+    try {
+      const respuesta = await app.inject({
+        method: 'POST',
+        url: '/v1/reportes',
+        payload: {
+          id_cliente: randomUUID(),
+          lat: 4.61,
+          lng: -74.08,
+          categoria: 'OTRO',
+          severidad: 'BAJA',
+          descripcion: 'Descripción larga para que dispare el encolado del triage por IA',
+        },
+      });
+
+      assert.equal(respuesta.statusCode, 201);
+      assert.ok(respuesta.json().codigo_publico);
+    } finally {
+      (config as { REDIS_URL: string }).REDIS_URL = original;
+    }
+  });
+
+  it('encolar no hace nada cuando REDIS_URL está vacía', async () => {
+    const original = config.REDIS_URL;
+    (config as { REDIS_URL: string }).REDIS_URL = '';
+
+    try {
+      assert.equal(colasHabilitadas(), false);
+      // No debe lanzar ni quedarse colgado: simplemente no encola.
+      await encolarTriage(randomUUID());
+    } finally {
+      (config as { REDIS_URL: string }).REDIS_URL = original;
+    }
   });
 });

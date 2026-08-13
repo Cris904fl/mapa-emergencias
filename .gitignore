@@ -19,3 +19,4 @@ apps/api/almacen/
 
 # Credenciales del despliegue de beta. Nunca se versionan.
 credenciales-beta.txt
+render.env.txt
