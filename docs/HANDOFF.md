@@ -1,6 +1,6 @@
 # HANDOFF — Mapa inteligente de afectaciones
 
-Estado del repositorio en el commit **`4c8daaf`** (rama `main`, sincronizada con
+Estado del repositorio en el commit **`af45683`** (rama `main`, sincronizada con
 `origin/main`). Documento escrito inspeccionando el código y la base de datos en
 ejecución, no de memoria.
 
@@ -46,7 +46,8 @@ quién hizo qué.
 
 **Alcance actual.** Un despliegue de un solo evento, **público y en uso** desde
 el 13 de agosto de 2026. No hay multi-tenancy, ni federación entre entidades, ni
-geografía de DIVIPOLA (la tabla `lugares` está vacía en producción). Sí hay
+geografía de DIVIPOLA completa (hay municipios de todo el país, y localidades y
+UPZ solo de Bogotá). Sí hay
 3 388 recursos de emergencia de todo el país.
 
 ---
@@ -64,6 +65,11 @@ geografía de DIVIPOLA (la tabla `lugares` está vacía en producción). Sí hay
 | **Consulta de un caso por su código público** | verificada contra reportes reales |
 | **Notificaciones push a quien reportó** | recibida en un dispositivo real |
 | **Aviso de la línea oficial (123) en la pantalla ciudadana** | verificado en producción: las dos direcciones del condicional y 44 px de área táctil medidos |
+| **Fotos del reporte en las tres pantallas** (consulta, campo, tablero) | verificado en producción con reportes reales |
+| **Modo oscuro con botón de tres estados** (automático / claro / oscuro) | 17 combinaciones de contraste medidas, AA en ambos temas |
+| **Aviso de versión nueva** para pestañas que llevan horas abiertas | detectó en vivo una pestaña desactualizada |
+| **Geografía: 1 122 municipios, 20 localidades y 112 UPZ** con su población | verificado en producción: 112/112 UPZ con población |
+| **19 estaciones de bomberos oficiales de Bogotá** (IDECA, con teléfono) | cargadas; las de OSM dentro del polígono de Bogotá, retiradas |
 | **Medios en Supabase Storage** | subida y descarga con SHA-256 idéntico |
 | **3 388 recursos de emergencia de todo Colombia** | cargados desde OpenStreetMap |
 | Cron: despierta la API y refresca prioridades cada 10 min | observado refrescando solo |
@@ -95,10 +101,10 @@ geografía de DIVIPOLA (la tabla `lugares` está vacía en producción). Sí hay
 
 ### ⬜ Pendiente
 
-- **Geografía de `lugares`: vacía en producción.** No se sembró a propósito (los
-  datos de desarrollo son dos barrios de Bogotá y aparecerían como reales), pero
-  eso deja **el panel de «Zonas» del tablero sin nada** y ningún reporte resuelve
-  su zona por contención espacial. Es el hueco más visible del despliegue.
+- ~~Geografía de `lugares` vacía~~ **RESUELTO.** Hoy tiene 1 122 municipios del
+  MGN del DANE, las 20 localidades y las 112 UPZ de Bogotá (IDECA), todas con
+  población. El panel de «Zonas» ordena por reportes por habitante. Falta el
+  nivel de centros poblados fuera de Bogotá (§10).
 - Proveedor propio de teselas (hoy: OpenStreetMap, cuya política **no permite
   producción**). Menos urgente de lo que parece: desde que el bundle está
   partido, **el ciudadano no carga el mapa** — las teselas solo las pide el
@@ -590,6 +596,14 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | **Aviso permanente de que esto no reemplaza al 123** | ✅ verificado en producción |
 | **Recordatorio del 123 al confirmar un reporte con vidas en riesgo** | ✅ los dos casos, en producción |
 | **La consulta por código no promete plazos** | ✅ verificado con un código real |
+| **Ver las fotos del reporte al consultar el caso** | ✅ le confirma a quien reportó que su foto llegó |
+| **Ver las fotos en campo antes de salir** | ✅ a demanda; solas en los casos propios |
+| **Ver las fotos al expandir una fila del tablero** | ✅ con enlace «desglose y fotos» que delata el gesto |
+| **Modo oscuro, siguiendo al sistema o a mano** | ✅ botón de tres estados, sin destello al cargar |
+| **Aviso de versión nueva sin recargar por su cuenta** | ✅ avisa, no recarga: no le borra el formulario a nadie |
+| **Resolución de zona por municipio, localidad y UPZ** | ✅ el trigger toma el nivel más pequeño |
+| **Reportes por habitante en el panel de zonas** | ✅ el denominador cambia el orden de la tabla |
+| **Recursos oficiales con teléfono en Bogotá** | ✅ 19 estaciones de bomberos de IDECA |
 
 ---
 
@@ -819,8 +833,22 @@ de los seis solo aparecen fuera de la máquina de desarrollo.
   SW suma complejidad; el reporte es lo que ordena un rescate).
 - **`v_cola_prioridad_vivo` y `?vivo=true`** hacen una llamada a función por fila.
   Exactos pero O(n); usar con filtros o volúmenes acotados.
-- **`lugares` está vacía en producción**, así que no hay resolución de zona ni
-  panel de zonas.
+- **La población mezcla dos series.** Los municipios llevan el censo de 2018
+  (`stp27_pers`, gente contada); las zonas de Bogotá llevan la serie distrital
+  del mismo año, que corrige la omisión censal. Para Bogotá son 3,2 % de
+  diferencia. Irrelevante frente a las diferencias de 15× que el panel detecta,
+  pero está ahí y `poblacion_anio` no lo distingue: haría falta una columna
+  `poblacion_fuente`.
+- **Los bomberos de OSM y los de IDECA no se deduplican solos.** `fuente` +
+  `fuente_id` evita que una carga pise a la otra, no que la misma estación exista
+  dos veces. Se resolvió borrando las de OSM **dentro del polígono de Bogotá**
+  (`scripts/depurar-bomberos-bogota.mjs`); fuera de ahí siguen conviviendo, y en
+  OSM había duplicados internos.
+- **Las 3 059 instituciones de salud de IDECA NO se cargan, a propósito.** Tienen
+  coordenadas oficiales, pero ningún campo distingue un hospital de un
+  consultorio de una pieza y no hay capa de urgencias. Cargarlas distorsionaría
+  el **término de aislamiento**: tres mil consultorios harían que todo reporte de
+  Bogotá parezca bien cubierto y le bajarían el puntaje.
 - **Los recursos son de OpenStreetMap**: dato comunitario, sin verificar. Para el
   término de aislamiento sirve —un error de 200 m no cambia una decisión— pero
   `GET /v1/recursos/cercanos` sí se le podría mostrar a un rescatista, y ahí la
@@ -939,7 +967,7 @@ pooler de Supabase —que es lo normal para administrar el despliegue desde
 aquí— y el único control de la siembra era `NODE_ENV === 'production'`, que ahí
 vale `development`. Es decir: `npm run bd:sembrar` escribía los datos de
 demostración **en producción**, incluidos los tres usuarios con clave `demo1234`
-y los dos barrios de Bogotá en `lugares`, que está vacía justamente para que no
+y los dos barrios de Bogotá en `lugares`, que entonces estaba vacía para que no
 aparezcan como geografía real. Y `npm run bd:reiniciar` los encadena, así que el
 daño estaba a un comando cuyo nombre no lo sugiere. Ahora se comprueba el
 **destino** y no la intención, por la misma razón por la que el almacén de medios
@@ -957,6 +985,37 @@ cola de personas reales.**
 **Y hay una cuenta operativa nueva** para alguien de fuera del proyecto, creada
 con `npm run clave` contra producción. Es la primera vez que el sistema tiene a
 alguien además de quien lo construyó. Ver §11: eso cambia la pregunta abierta.
+
+### Y en la misma tarde: fotos, tema, versión y geografía
+
+| Commit | Qué |
+|---|---|
+| `9864523` | las fotos del reporte en la consulta y en campo; el almacén deja de dar 500 por un archivo ausente |
+| `c36cb0e` | fotos también al expandir una fila del tablero, y que se vea que se puede expandir |
+| — | aviso de versión nueva cuando la pestaña lleva horas abierta |
+| — | modo oscuro con botón de tres estados |
+| — | geografía: 1 122 municipios del DANE, población del censo, 20 localidades y 112 UPZ de Bogotá con su población distrital, 19 estaciones de bomberos de IDECA |
+
+**Lo que enseñó cada una, en una línea:**
+
+- **El service worker no sirve como señal de versión nueva**: `sw.js` es idéntico
+  byte a byte entre despliegues —los que cambian de nombre son los bundles, que
+  llevan hash—, así que `controllerchange` no se dispara nunca. Se compara el
+  nombre del bundle que declara el HTML.
+- **Un modo oscuro se rompe por mezclar relleno con texto.** Siete colores se
+  usaban como fondo con texto blanco encima y también como texto: necesidades
+  opuestas. Los `--relleno-*` son iguales en los dos temas y solo se aclara el
+  uso como texto. Las 17 combinaciones medidas pasan AA en ambos.
+- **La geometría del MGN completa son 155 MB**; generalizada a 22 m, 10 MB. Es
+  toda la precisión que necesita decir en qué municipio cayó un punto.
+- **Bogotá existe dos veces en DIVIPOLA** —departamento `11` y municipio `11001`,
+  área idéntica— y el trigger ordena por área. Por eso se carga **un solo nivel**
+  por omisión.
+- **El trigger no mira atrás**: resuelve la zona al insertar. Agregar un nivel más
+  fino exige `--reasignar-zonas`, o quedan dos niveles mezclados en la misma tabla.
+- **El denominador tiene que coincidir con la escala del hecho.** Los cuatro
+  reportes de Bogotá valían `×10k 0.006` contra el municipio; contra su UPZ, uno
+  de ellos es **0.229**, la señal más alta de todo el país. El mismo reporte.
 
 ## 11. SIGUIENTE PASO
 
@@ -988,6 +1047,38 @@ el acceso, y la mitad de ayuda mutua gana peso de verdad.
 
 Es la primera vez que la pregunta se puede responder mirando en vez de razonando.
 Vale la pena esperar esa respuesta antes de escribir nada.
+
+#### La respuesta llegó el mismo día
+
+**`dianaindagro` hizo triage sobre reportes reales horas después de recibir la
+cuenta.** Cinco reportes triados por persona, uno resuelto, la espera máxima
+bajando de 16,8 h a 8,2 h. Nadie se lo pidió y no hubo que convencer a ninguna
+institución: bastó con dar acceso.
+
+Eso inclina la balanza hacia **herramienta de triage**, y lo que falta no es
+producto sino distribución.
+
+Pero el rastro de la bitácora dice algo más, y hay que leerlo con cuidado:
+
+```
+RPT-XDXFS   RECIBIDO → ASIGNADO → EN_TRIAGE → ASIGNADO    en 11 minutos
+RPT-78ECS   EN_TRIAGE → ASIGNADO                          en 25 segundos
+```
+
+Eso no es un flujo de trabajo, es alguien explorando botones — y la culpa no es
+de ella: nada en la pantalla dice qué significa cada uno. **`ASIGNADO` le manda
+una notificación push al ciudadano diciendo que un equipo quedó a cargo de su
+caso**, sin pedir equipo, sin nombre y sin confirmación, y sin llenar
+`organizacion_asignada_id`, que existe justo para eso.
+
+Es el «voy para allá» falso que esta misma sección marca como el riesgo a evitar,
+ocurriendo ya. **La tarea que sale de aquí no es una función nueva: es que
+`ASIGNADO` sea honesto** —que el botón diga que eso le avisa a una persona, y que
+no se pueda asignar sin registrar a quién.
+
+Corolario de método: los 2 «asignados sin llegada» que marca la alerta son
+artefactos de esa exploración. **No calibrar el umbral con estos datos**, que es
+exactamente el error que §10 ya documentó una vez.
 
 Hay dos caminos y son distintos:
 
@@ -1041,7 +1132,8 @@ bien.)
 
 ### Lo demás, que sí es concreto
 
-**Sembrar `lugares`.** Es el hueco más visible: sin geografía no hay resolución
+**Sembrar `lugares`.** ✅ Hecho el mismo día (§10). Lo que sigue abajo es el
+razonamiento de cuando era el hueco más visible: sin geografía no había resolución
 de zona y el panel de «Zonas» del tablero está vacío. Hace falta DIVIPOLA real,
 no los dos barrios de prueba.
 
@@ -1134,6 +1226,29 @@ npm run bd:clave -- 'la-clave-nueva'
 
 # cargar recursos de emergencia desde un archivo (idempotente)
 node --env-file-if-exists=.env scripts/cargar-recursos.mjs db/recursos-colombia.json
+
+# ---- geografía ----
+# municipios del país (MGN del DANE) + población del censo. Idempotente por
+# código DIVIPOLA. Baja ~10 MB generalizados a 22 m; reintenta cada página.
+node --env-file-if-exists=.env scripts/cargar-lugares.mjs
+
+#   --con-localidades   las 20 de Bogotá (IDECA)
+#   --con-upz           las 112 UPZ; le ganan a la localidad en el trigger
+#   --con-departamentos ojo: empata con Bogotá en el trigger (ver §10)
+#   --solo-poblacion    solo la población, sin bajar geometría
+#   --solo-zonas        solo asignar zona a reportes que no la tienen, sin red
+#   --reasignar-zonas   recalcular TODOS: obligatorio al agregar un nivel más fino
+node --env-file-if-exists=.env scripts/cargar-lugares.mjs --con-upz --reasignar-zonas
+
+# derivar los CSV de población de Bogotá desde los ODS de la SDP (una vez al año)
+node scripts/derivar-poblacion-bogota.mjs <archivo.ods> [anio]
+
+# estaciones de bomberos oficiales de Bogotá (IDECA) → db/bomberos-bogota.json
+node scripts/derivar-bomberos-bogota.mjs
+
+# quitar las de OSM que quedan dentro de Bogotá. Simula sin --ejecutar.
+# Se niega a borrar si no hay ninguna de IDECA cargada.
+node --env-file-if-exists=.env scripts/depurar-bomberos-bogota.mjs --ejecutar --podar-json
 
 # probar una notificación push de punta a punta
 # cambia el estado POR LA API, que es lo que dispara el aviso
@@ -1343,8 +1458,10 @@ variable puesta a mano en el panel funciona hasta el siguiente push y desaparece
 - **3 388 recursos** de emergencia de todo Colombia, desde OpenStreetMap
   (`db/recursos-colombia.json`). Hospitales, puestos de salud, estaciones de
   bomberos y de ambulancias.
-- **`lugares` está vacía.** No se sembró a propósito: los datos de desarrollo son
-  dos barrios de Bogotá y aparecerían como reales.
+- **`lugares`: 1 122 municipios, 20 localidades y 112 UPZ**, con población. Nada
+  de datos de desarrollo: los dos barrios de prueba de la semilla nunca se
+  sembraron aquí, y desde la migración 012 la siembra se niega a tocar una base
+  que no sea local.
 - **Ningún dato de prueba en `reportes`.** Los que hay son de personas reales.
 
 ### Verificación de que sigue vivo
@@ -1374,29 +1491,32 @@ consulta por código, notificaciones push, atención en campo con ruta y
 obstáculos, tablero con filtros cruzables — con **76 pruebas** pasando, todo en
 `origin/main` y **reportes de personas reales entrando**.
 
-**Último cambio realizado.** Commit `4c8daaf`: `bd:sembrar` se niega a sembrar una
-base que no es local. Antes escribía los datos de demostración en producción
-—usuarios con clave `demo1234` incluidos— porque el único control era `NODE_ENV` y
-lo que decide el destino es `DATABASE_URL` (§10).
+**Último cambio realizado.** Commit `af45683`: las 112 UPZ de Bogotá con su
+población distrital y las 19 estaciones de bomberos oficiales de IDECA. Con eso
+el panel de «Zonas» pasó de estar vacío en la mañana a ordenar por reportes por
+habitante a escala de barrio.
 
-Los dos anteriores, del mismo día: `549289e`, la pantalla ciudadana deja de
-prometer una revisión humana que no existe y manda al **123**; `39bce84`, ese
-enlace pasa de 22 a 44 px de área táctil.
+**Próxima tarea exacta.** **Que `ASIGNADO` sea honesto** (§11). Ya no es una
+hipótesis: una operadora real puso dos reportes en `ASIGNADO` explorando la
+interfaz, y ese estado le manda una notificación al ciudadano diciendo que un
+equipo va en camino. El botón no pide equipo, ni nombre, ni confirmación. Es el
+único cambio que hoy evita que el sistema le mienta a alguien que pidió auxilio.
 
-**Próxima tarea exacta.** Ninguna de código, y eso es deliberado: **hay una cuenta
-operativa entregada a alguien de fuera del proyecto, y lo que hará esa persona
-responde la pregunta de §11 mejor que cualquier razonamiento.** Lo que hay que
-hacer es mirar el tablero: si `sin_atender` baja de 6, la herramienta de triage
-sirve tal como está y lo que falta es distribución.
+Después, por orden:
 
-Lo accionable sin decidir nada de producto:
-
-1. **Sembrar `lugares`** con DIVIPOLA real. Es el hueco más visible: sin
-   geografía no hay resolución de zona y el panel de «Zonas» está vacío. Hace
-   falta decidir la fuente y el alcance antes de escribir nada.
-2. **Cambio de contraseña.** No existe (§9). Con más de una persona con cuenta,
-   nadie puede rotar su propia clave.
-3. **Etiquetado de fotos** — necesita `ollama pull gemma3:4b`. Ojo: producción
+1. **Cambio de contraseña.** No existe (§9). Con dos cuentas, nadie puede rotar
+   su propia clave ni siquiera si se filtró.
+2. **Jurisdicciones de bomberos** (IDECA, 17 polígonos). Responden «qué estación
+   es responsable» en vez de «cuál está más cerca». No es una carga de datos:
+   necesita tabla propia, endpoint y pantalla, porque meterlas en `lugares`
+   rompería la resolución de zona.
+3. **Zonas urbanas del MGN** (8 420). Precisión en la Colombia rural. Necesita un
+   tipo `CENTRO_POBLADO` en el enum y son 20 MB en 169 peticiones contra un
+   servicio que corta la conexión.
+4. **NASA FIRMS** para corroborar reportes de incendio con focos activos.
+   Bloqueado: hay que registrar una `MAP_KEY` gratuita. Va con el candado de la
+   IA — se le muestra al operador, no toca el puntaje.
+5. **Etiquetado de fotos** — necesita `ollama pull gemma3:4b`. Ojo: producción
    corre con `IA_PROVEEDOR=ninguno`, así que funcionaría en la máquina de
    desarrollo y **no le llegaría a ningún usuario**. Es lo más visible de hacer,
    no lo más útil.
