@@ -1727,7 +1727,21 @@ button.entrada-leyenda:focus-visible {
 
 /* El número es un enlace `tel:`: en el celular se marca con un toque. Se
    subraya y se agranda para que se lea como algo que se puede pulsar, no como
-   un dato más de la frase. */
+   un dato más de la frase.
+
+   El relleno es área táctil, no apariencia. Medido en el sitio desplegado a
+   375 px, el enlace daba 22 px de alto: el objetivo más pequeño de una pantalla
+   cuya primera prioridad de diseño son los toques grandes — y encima el más
+   importante, porque es el que salva la llamada. Con 0.7rem arriba y abajo
+   queda en 44.4 px.
+
+   Va sobre un elemento **en línea** a propósito: el relleno vertical de un
+   elemento en línea no altera la altura de la línea de texto, así que agranda
+   la zona que responde al toque sin mover un pixel de lo que se ve (medido:
+   el bloque sigue en 216.5 px). Con `inline-block` habría que compensar con
+   márgenes negativos para no separar los renglones. El relleno horizontal se
+   queda en 0.15rem porque en la cabecera el número lleva un punto pegado
+   detrás. */
 .aviso-linea-oficial a,
 .recordar-linea-oficial a {
   color: var(--alarma);
@@ -1735,6 +1749,7 @@ button.entrada-leyenda:focus-visible {
   font-size: 1.08em;
   text-decoration: underline;
   text-underline-offset: 2px;
+  padding: 0.7rem 0.15rem;
 }
 
 .aviso-precision {
