@@ -12,6 +12,7 @@ import {
   type Resumen,
   type Zona,
 } from '../lib/api.ts';
+import { FotosDelReporte } from '../componentes/GaleriaMedios.tsx';
 import { TIBIA_S, describirAntiguedad } from '../lib/frescura.ts';
 
 /**
@@ -674,6 +675,19 @@ function FilaCola({
           ) : (
             <p className="vacio">Sin desglose: la prioridad no se ha calculado todavía.</p>
           )}
+
+          {/* Las fotos van entre el desglose y las acciones: primero se mira,
+              después se decide.
+
+              Se cargan solas porque este bloque solo existe cuando el operador
+              expandió la fila — expandir ya es pedirlo. Cargar las fotos de la
+              cola entera para mirar una sería descargar cincuenta reportes.
+
+              El stopPropagation es por lo mismo que el de las acciones: abrir
+              una foto no debe además volar el mapa hasta el reporte. */}
+          <div onClick={(evento) => evento.stopPropagation()}>
+            <FotosDelReporte reporteId={reporte.id} autocargar titulo="Fotos del reporte" />
+          </div>
 
           {autenticado && (
             /* Un solo stopPropagation para todas las acciones: cambiar el

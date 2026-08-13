@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { Medio } from '../lib/api.ts';
+import { useCallback, useEffect, useState } from 'react';
+import { api, type Medio } from '../lib/api.ts';
 import { formatearBytes } from '../lib/imagen.ts';
 
 /**
@@ -27,6 +27,68 @@ import { formatearBytes } from '../lib/imagen.ts';
  * Se dice con un texto en lugar de dejar el icono de imagen rota, que no explica
  * nada.
  */
+
+/**
+ * La galería de un reporte que hay que ir a buscar, por su id.
+ *
+ * La usan el tablero y la vista de campo, que reciben sus listas de sitios que
+ * no traen los medios (`v_cola_prioridad_vivo` y `v_casos_campo`). Agregárselos
+ * a esas consultas obligaría a cargar los archivos de veinte o cincuenta
+ * reportes para mirar los de uno.
+ *
+ * `autocargar` decide cuándo se gasta la red:
+ *
+ *   · El tablero lo pone en `true` porque este componente solo se monta cuando
+ *     el operador expande la fila — expandir ya es pedirlo.
+ *   · Campo lo pone en `true` solo para los casos propios, donde el rescatista
+ *     va para allá. En la lista de cercanos deja el botón, porque puede traer
+ *     veinte y quien la mira está en la calle con su propio plan de datos.
+ *
+ * Cuando el reporte no trae nada se dice. «No hay fotos» y «no cargaron las
+ * fotos» llevan a decisiones distintas cuando uno está decidiendo si va.
+ */
+export function FotosDelReporte({
+  reporteId,
+  autocargar,
+  titulo = 'Lo que envió quien reportó',
+}: {
+  reporteId: string;
+  autocargar: boolean;
+  titulo?: string;
+}) {
+  const [medios, setMedios] = useState<Medio[] | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [fallo, setFallo] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setFallo(false);
+    try {
+      setMedios(await api.mediosDelReporte(reporteId));
+    } catch {
+      setFallo(true);
+    } finally {
+      setCargando(false);
+    }
+  }, [reporteId]);
+
+  useEffect(() => {
+    if (autocargar) void cargar();
+  }, [autocargar, cargar]);
+
+  if (medios === null) {
+    if (cargando) return <p className="cargando">Buscando fotos…</p>;
+    return (
+      <button type="button" className="enlace" onClick={() => void cargar()}>
+        {fallo ? 'no cargaron las fotos, reintentar' : 'ver fotos'}
+      </button>
+    );
+  }
+
+  if (medios.length === 0) return <p className="nota-campo">Sin fotos en este reporte.</p>;
+
+  return <GaleriaMedios medios={medios} titulo={titulo} />;
+}
 
 export function GaleriaMedios({ medios, titulo }: { medios: Medio[]; titulo: string }) {
   if (medios.length === 0) return null;
