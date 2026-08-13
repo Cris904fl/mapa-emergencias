@@ -13,6 +13,15 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-08-01",
 
+  // Va aquí y no en el panel a propósito: `wrangler deploy` reemplaza las
+  // variables del Worker con las de este archivo, así que una API_ORIGEN puesta
+  // a mano en el panel funcionaría hasta el siguiente despliegue y desaparecería
+  // sin avisar. No es un secreto —es la URL pública de la API—, así que
+  // versionarla es además lo que hace el despliegue reproducible.
+  "vars": {
+    "API_ORIGEN": "https://mapa-emergencias.onrender.com"
+  },
+
   "assets": {
     "directory": "./apps/web/dist",
     "binding": "ASSETS",
