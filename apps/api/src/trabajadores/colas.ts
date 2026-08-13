@@ -62,11 +62,15 @@ export function obtenerConexionRedis(): Redis {
    * Se avisa una sola vez para no llenar el registro con un mensaje por
    * reintento.
    */
-  nueva.on('error', (error: Error) => {
+  nueva.on('error', (error: Error & { code?: string }) => {
     if (yaSeAvisoDeRedis) return;
     yaSeAvisoDeRedis = true;
+    // ioredis a veces deja `message` vacío y solo pone `code` (ECONNREFUSED,
+    // ENOTFOUND). Un aviso que dice «Redis no está disponible ()» no ayuda a
+    // nadie a las tres de la mañana.
+    const detalle = error.message || error.code || String(error);
     console.warn(
-      `Redis no está disponible (${error.message}). ` +
+      `Redis no está disponible (${detalle}). ` +
         'Los reportes se siguen aceptando; el enriquecimiento por IA queda a demanda. ' +
         'Para apagar las colas del todo, deje REDIS_URL vacía.',
     );
