@@ -16,6 +16,88 @@
  */
 
 export default {
+  /**
+   * Tarea programada: mantener la API despierta y refrescar las prioridades.
+   *
+   * Dos cosas que el despliegue gratuito necesita de fuera:
+   *
+   * 1. **Despertarla.** La instancia gratuita de Render hiberna tras unos
+   *    minutos sin tráfico y tarda hasta un minuto en volver. El reporte del
+   *    ciudadano no se pierde —la PWA lo guarda en el teléfono antes de
+   *    enviarlo— pero la aplicación parece rota justo cuando más importa.
+   *
+   * 2. **Refrescar la cola.** Dos términos del índice de prioridad cambian
+   *    solos: la espera crece con el reloj y la concentración cambia cuando
+   *    llegan reportes vecinos. Sin el trabajador de BullMQ —que necesita un
+   *    Redis que aquí no hay— nadie los recalcula, y la cola se congela en el
+   *    orden de la última escritura: un reporte de hace seis horas se vería
+   *    igual que uno de hace cinco minutos.
+   *
+   * Se hace desde acá y no desde un servicio de cron externo porque el Worker ya
+   * existe, no hace falta otra cuenta y la configuración queda versionada junto
+   * al código que depende de ella.
+   */
+  async scheduled(controller, env, ctx) {
+    const destino = env.API_ORIGEN;
+    if (!destino) {
+      console.warn('Sin API_ORIGEN: no hay a quién despertar.');
+      return;
+    }
+
+    // waitUntil para que el Worker no termine antes de que salgan las
+    // peticiones: despertar la instancia puede tardar bastante.
+    /**
+     * Un reintento, con pausa.
+     *
+     * Medido: contra la instancia gratuita, alrededor de una de cada tres
+     * peticiones falla en la capa de red mientras despierta. Sin reintento, esa
+     * de cada tres deja la instancia dormida otros diez minutos — que es
+     * exactamente lo que este cron existe para evitar.
+     */
+    const intentar = async (accion, hacer) => {
+      for (let intento = 1; intento <= 2; intento++) {
+        try {
+          return await hacer();
+        } catch (error) {
+          if (intento === 2) {
+            console.warn(`${accion}: falló dos veces (${error.message})`);
+            return null;
+          }
+          await new Promise((seguir) => setTimeout(seguir, 3_000));
+        }
+      }
+      return null;
+    };
+
+    ctx.waitUntil(
+      (async () => {
+        const salud = await intentar('despertar', async () => {
+          const r = await fetch(new URL('/salud', destino));
+          console.log(`despertar: HTTP ${r.status}`);
+          return r;
+        });
+        if (!salud) return;
+
+        // El refresco exige el secreto compartido. Va como *secret* del Worker y
+        // no como variable normal: `wrangler deploy` reescribe las variables con
+        // las del repositorio, y un secreto no puede vivir en el repositorio.
+        if (!env.SECRETO_MANTENIMIENTO) {
+          console.log('Sin SECRETO_MANTENIMIENTO: no se refrescan prioridades.');
+          return;
+        }
+
+        await intentar('refresco de prioridades', async () => {
+          const r = await fetch(new URL('/v1/mantenimiento/refrescar-prioridades', destino), {
+            method: 'POST',
+            headers: { 'x-secreto-mantenimiento': env.SECRETO_MANTENIMIENTO },
+          });
+          console.log(`refresco de prioridades: HTTP ${r.status}`);
+          return r;
+        });
+      })(),
+    );
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
 

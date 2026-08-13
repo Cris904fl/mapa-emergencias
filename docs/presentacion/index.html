@@ -315,6 +315,35 @@
     word-break: break-all;
   }
 
+  .nota-beta {
+    font-size: 0.94rem;
+    color: var(--ink-soft);
+    margin-bottom: 0;
+  }
+
+  /* Las limitaciones van antes de que alguien las descubra solo: quien prueba
+     una beta perdona un límite anunciado y desconfía de uno que se encuentra. */
+  .advertencias-beta {
+    border-left: 3px solid var(--accent);
+    padding: 0.2rem 0 0.2rem 1.1rem;
+    margin: 1.5rem 0;
+    font-size: 0.96rem;
+  }
+
+  .advertencias-beta ul {
+    margin: 0.6rem 0 0;
+    padding-left: 1.1rem;
+  }
+
+  .advertencias-beta li {
+    margin-bottom: 0.6rem;
+    line-height: 1.6;
+  }
+
+  .advertencias-beta li:last-child {
+    margin-bottom: 0;
+  }
+
   .pendiente {
     font-family: var(--sans);
     font-size: 0.9rem;
@@ -534,10 +563,33 @@
     <h2>La beta</h2>
 
     <div class="beta">
-      <span class="beta-etiqueta">Abre mañana</span>
-      <p class="pendiente">
-        ← Pegue acá el enlace de la beta antes de compartir esta página
+      <span class="beta-etiqueta">Ya está abierta</span>
+      <p>
+        <a class="enlace-beta" href="https://mapa-emergencias.cristiafl3.workers.dev"
+          >mapa-emergencias.cristiafl3.workers.dev</a
+        >
       </p>
+      <p class="nota-beta">
+        No hay que instalar nada ni crear cuenta. Se abre en el navegador del celular
+        y, si quiere, se puede «Agregar a pantalla de inicio» para que quede como una
+        aplicación más.
+      </p>
+    </div>
+
+    <div class="advertencias-beta">
+      <p><strong>Dos cosas que conviene saber antes de probarla:</strong></p>
+      <ul>
+        <li>
+          <strong>Las fotos no se guardan todavía.</strong> El texto del reporte sí
+          queda, pero las imágenes se pierden cuando el servidor se reinicia. Es una
+          limitación del alojamiento gratuito, no del sistema.
+        </li>
+        <li>
+          <strong>La primera vez puede tardar hasta un minuto.</strong> El servidor se
+          duerme cuando nadie lo usa y hay que despertarlo. Su reporte no se pierde
+          mientras tanto: queda guardado en el teléfono y se envía solo.
+        </li>
+      </ul>
     </div>
 
     <p>

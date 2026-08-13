@@ -31,6 +31,16 @@
     "run_worker_first": ["/v1/*"]
   },
 
+  // Cada 10 minutos: despierta la API y refresca las prioridades.
+  //
+  // Los 10 minutos salen de que Render hiberna la instancia gratuita tras unos
+  // 15 sin tráfico; con este margen no llega a dormirse. Sin esto, la primera
+  // persona que entre después de un rato de calma espera hasta un minuto — su
+  // reporte no se pierde, pero la app parece rota.
+  "triggers": {
+    "crons": ["*/10 * * * *"]
+  },
+
   "observability": {
     "enabled": true
   }
