@@ -21,6 +21,8 @@
     "dev:web": "npm run dev --workspace=@emergencias/web",
     "construir": "npm run construir --workspace=@emergencias/api && npm run construir --workspace=@emergencias/web",
     "probar": "npm run probar --workspace=@emergencias/api",
-    "tipos": "npm run tipos --workspace=@emergencias/api && npm run tipos --workspace=@emergencias/web"
+    "tipos": "npm run tipos --workspace=@emergencias/api && npm run tipos --workspace=@emergencias/web",
+    "bd:probar-conexion": "node --env-file-if-exists=.env scripts/probar-conexion.mjs",
+    "bd:clave": "node scripts/fijar-clave-bd.mjs"
   }
 }
