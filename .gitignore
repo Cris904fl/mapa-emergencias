@@ -20,3 +20,7 @@ apps/api/almacen/
 # Credenciales del despliegue de beta. Nunca se versionan.
 credenciales-beta.txt
 render.env.txt
+
+# Artefactos que genera la suite al probar el almacen de medios.
+almacen-pruebas/
+apps/api/almacen-pruebas/

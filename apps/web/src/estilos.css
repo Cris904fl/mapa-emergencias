@@ -1581,3 +1581,161 @@ button.entrada-leyenda:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ------------------------------------------- consulta por código público */
+/* La app promete al confirmar un reporte que con ese código se puede
+   preguntar por el caso. Esta sección es donde esa promesa se cumple. */
+
+.consultar-caso {
+  border-top: 1px solid var(--linea);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+}
+
+.formulario-consulta {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.formulario-consulta label {
+  flex: 1 1 12rem;
+}
+
+.formulario-consulta input {
+  text-transform: uppercase;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.05em;
+}
+
+.resultado-consulta {
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  padding: 1rem 1.1rem;
+  background: var(--superficie);
+}
+
+/* El estado va grande y con su explicación en palabras: quien consulta no
+   sabe qué significa «VERIFICADO», sabe qué significa «alguien lo revisó». */
+.estado-caso-grande {
+  border-left: 4px solid var(--tenue);
+  padding-left: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.estado-caso-grande .etiqueta-estado {
+  display: block;
+  font-weight: 700;
+  font-size: 1.15rem;
+  margin-bottom: 0.2rem;
+}
+
+.estado-caso-grande p {
+  margin: 0;
+  color: var(--tinta-suave);
+  font-size: 0.94rem;
+}
+
+.estado-caso-grande.estado-recibido { border-left-color: var(--info); }
+.estado-caso-grande.estado-en_triage,
+.estado-caso-grande.estado-verificado { border-left-color: var(--aviso); }
+.estado-caso-grande.estado-asignado,
+.estado-caso-grande.estado-en_atencion { border-left-color: var(--acento); }
+.estado-caso-grande.estado-resuelto { border-left-color: var(--bien); }
+.estado-caso-grande.estado-duplicado,
+.estado-caso-grande.estado-descartado { border-left-color: var(--tenue); }
+
+.datos-caso {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.9rem;
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+}
+
+.datos-caso dt {
+  color: var(--tenue);
+}
+
+.datos-caso dd {
+  margin: 0;
+}
+
+.linea-tiempo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+
+.linea-tiempo li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--linea);
+}
+
+.linea-tiempo .momento {
+  color: var(--tenue);
+  white-space: nowrap;
+}
+
+.linea-tiempo .nota-paso {
+  color: var(--tinta-suave);
+}
+
+/* ------------------------------------------------ aviso de mala precisión */
+/* Antes la precisión iba en letra pequeña y alguien envió un reporte con 2 km
+   de error igual. Esto se ve; y ofrece la salida sin bloquear el envío. */
+
+.aviso-precision {
+  background: #fffbeb;
+  border: 1px solid var(--aviso);
+  border-left-width: 4px;
+  border-radius: var(--radio);
+  padding: 0.85rem 1rem;
+  margin-top: 0.7rem;
+  font-size: 0.93rem;
+}
+
+.aviso-precision small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--tinta-suave);
+}
+
+.acciones-precision {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+/* --------------------------------------------- acciones tras confirmar */
+
+.acciones-confirmacion {
+  display: flex;
+  gap: 0.8rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.7rem;
+}
+
+.boton-compartir {
+  display: inline-block;
+  background: #25d366;
+  color: #06251a;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: none;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+}
+
+.boton-compartir:hover {
+  filter: brightness(0.95);
+}

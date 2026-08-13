@@ -1,0 +1,14 @@
+[
+  {
+    "_comentario": "PLANTILLA. Copie este archivo a db/recursos.json, reemplace TODO y cárguelo con: node --env-file-if-exists=.env scripts/cargar-recursos.mjs db/recursos.json",
+    "_como_obtener_coordenadas": "En Google Maps, clic derecho sobre el sitio exacto → la primera línea del menú son las coordenadas (lat, lng). Cópielas tal cual. En Colombia la latitud es positiva y la longitud negativa.",
+    "_tipos_validos": "HOSPITAL, PUESTO_SALUD, ALBERGUE, PUNTO_AGUA, PUNTO_ALIMENTO, PUESTO_MANDO, ESTACION_BOMBEROS, EQUIPO_RESCATE, AMBULANCIA, MAQUINARIA, HELIPUERTO",
+    "_advertencia": "No ponga coordenadas aproximadas. El sistema mide distancias reales en metros y decide con ellas: un hospital mal ubicado hace creer que hay ayuda cerca de donde no la hay.",
+    "nombre": "REEMPLACE ESTE OBJETO ENTERO",
+    "tipo": "HOSPITAL",
+    "lat": 0,
+    "lng": 0,
+    "capacidad_total": null,
+    "notas": "El campo notas es opcional"
+  }
+]

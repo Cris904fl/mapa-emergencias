@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { construirApp } from '../src/app.ts';
 import { bd } from '../src/db/pool.ts';
 import { config } from '../src/config.ts';
+import { almacen } from '../src/servicios/almacen.ts';
 import { colasHabilitadas, encolarTriage } from '../src/trabajadores/colas.ts';
 import {
   asegurarBaseDePruebas,
@@ -420,5 +421,35 @@ describe('alta de reportes sin Redis', () => {
     } finally {
       (config as { REDIS_URL: string }).REDIS_URL = original;
     }
+  });
+});
+
+describe('almacenamiento de medios', () => {
+  /**
+   * El contrato que importa: subir una foto y volver a leerla devuelve los
+   * mismos bytes, viva donde viva. Las fotos de la beta se estaban perdiendo
+   * porque el disco de Render es efímero; al meter Supabase Storage detrás de
+   * la misma interfaz, esta prueba es la que garantiza que el cambio no rompió
+   * el camino que ya funcionaba.
+   */
+  it('guarda y recupera los mismos bytes', async () => {
+    const bytes = Buffer.from('contenido de prueba con acentos: ñáé', 'utf8');
+    const llave = 'ab/cd/abcd1234prueba';
+
+    await almacen.guardar(llave, bytes, 'image/jpeg');
+    const leidos = await almacen.leer(llave);
+
+    assert.ok(leidos, 'debe encontrar lo que acabó de guardar');
+    assert.deepEqual(leidos, bytes);
+  });
+
+  it('devuelve null cuando el medio no está, en vez de lanzar', async () => {
+    // Un medio perdido no puede tumbar la descarga: la ruta responde 404 y el
+    // reporte sigue existiendo.
+    assert.equal(await almacen.leer('00/00/no-existe-en-ningun-lado'), null);
+  });
+
+  it('rechaza una llave que se sale del directorio del almacén', async () => {
+    await assert.rejects(() => almacen.leer('../../../etc/passwd'));
   });
 });

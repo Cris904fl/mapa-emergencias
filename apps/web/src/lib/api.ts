@@ -157,6 +157,33 @@ export type NombreFiltro =
 /** Espejo de `severidad_reporte` en db/migrations/002_tipos.sql. */
 export type Severidad = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA' | 'DESCONOCIDA';
 
+/**
+ * Un reporte visto por quien lo hizo, buscado con su código público.
+ *
+ * Se declara solo lo que la pantalla de consulta necesita: el detalle completo
+ * trae mucho más (puntaje, componentes, extracciones de IA) que no tiene por
+ * qué mostrarse a un ciudadano preocupado por su caso.
+ */
+export type CasoConsultado = {
+  properties: {
+    codigo_publico: string;
+    estado: string;
+    categoria: string;
+    severidad: string;
+    descripcion: string | null;
+    lugar: string | null;
+    reportado_en: string;
+    primera_respuesta_en: string | null;
+  };
+  historial: {
+    estado_nuevo: string;
+    estado_anterior: string | null;
+    creado_en: string;
+    nota: string | null;
+    por: string | null;
+  }[];
+};
+
 export type CasoCampo = {
   id: string;
   codigo_publico: string;
@@ -280,6 +307,19 @@ export const api = {
     ),
 
   recursosGeoJson: () => pedir<ColeccionGeoJson>('/v1/recursos'),
+
+  /**
+   * Consulta de un caso por su código público.
+   *
+   * Es la contraparte de la promesa que la app hace al confirmar un reporte
+   * («anótelo, con ese código puede preguntar por su caso»). El código se
+   * normaliza acá —mayúsculas, sin espacios— porque quien lo escribe lo copió
+   * a mano de una pantalla, a veces con afán.
+   */
+  consultarPorCodigo: (codigo: string) =>
+    pedir<CasoConsultado>(
+      `/v1/reportes/codigo/${encodeURIComponent(codigo.trim().toUpperCase())}`,
+    ),
 
   cambiarEstado: (id: string, estado: string, nota?: string) =>
     pedir<Record<string, unknown>>(`/v1/reportes/${id}/estado`, {

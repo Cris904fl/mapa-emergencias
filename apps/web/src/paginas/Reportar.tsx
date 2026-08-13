@@ -9,6 +9,7 @@ import {
   type EstadoUbicacion,
 } from '../lib/geo.ts';
 import { formatearBytes, reducirFoto } from '../lib/imagen.ts';
+import { ConsultarCaso } from '../componentes/ConsultarCaso.tsx';
 
 /**
  * Formulario ciudadano.
@@ -51,6 +52,16 @@ const SEVERIDADES: { valor: string; etiqueta: string }[] = [
 ];
 
 const MAX_FOTOS = 3;
+
+/**
+ * Por encima de esto la ubicación deja de servir para mandar a alguien.
+ *
+ * 150 m es aproximadamente una manzana y media: con eso todavía se puede llegar
+ * preguntando. Más allá, el punto señala una zona y no un sitio — y es justo lo
+ * que devuelve el navegador cuando estima por red en vez de usar el GPS. En la
+ * beta llegó un reporte con 2 km de radio.
+ */
+const PRECISION_ACEPTABLE_M = 150;
 
 export function Reportar() {
   const [categoria, setCategoria] = useState('');
@@ -232,7 +243,33 @@ export function Reportar() {
             <>
               <strong>Reporte enviado.</strong> Su código es{' '}
               <code>{recienGuardado.codigo_publico}</code>. Anótelo: con ese código
-              puede preguntar por su caso.
+              puede consultar su caso más abajo.
+              {/* Compartir por WhatsApp no es un adorno de producto: en una
+                  emergencia la coordinación pasa por ahí de todas formas, y un
+                  vecino que reenvía el código está avisando a quien sí puede
+                  llegar. Se usa el enlace wa.me, que abre la app instalada. */}
+              <div className="acciones-confirmacion">
+                <a
+                  className="boton-compartir"
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `Reporté una emergencia. Código ${recienGuardado.codigo_publico}. ` +
+                      `Se puede consultar en ${location.origin}/?vista=reportar`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Compartir por WhatsApp
+                </a>
+                <button
+                  type="button"
+                  className="enlace"
+                  onClick={() =>
+                    void navigator.clipboard?.writeText(recienGuardado.codigo_publico ?? '')
+                  }
+                >
+                  copiar el código
+                </button>
+              </div>
             </>
           ) : (
             <>
@@ -261,6 +298,41 @@ export function Reportar() {
               <small>{describirPrecision(ubicacion.ubicacion.precision_m)}</small>
             </p>
           )}
+
+          {/* Una ubicación con cientos de metros de error no sirve para mandar a
+              nadie: es la que da el navegador cuando no hay permiso de GPS y
+              estima por la red. Ya se mostraba la precisión en letra pequeña y
+              en la beta alguien envió un reporte con 2 km de radio — la vio y
+              siguió. Así que se dice fuerte y se ofrece la salida, pero **no se
+              bloquea el envío**: un reporte con mala ubicación sigue siendo
+              mejor que ninguno. */}
+          {ubicacion.fase === 'lista' &&
+            ubicacion.ubicacion.precision_m > PRECISION_ACEPTABLE_M && (
+              <div className="aviso-precision" role="alert">
+                <strong>Esta ubicación es muy imprecisa.</strong> El punto puede estar a{' '}
+                {ubicacion.ubicacion.precision_m >= 1000
+                  ? `${(ubicacion.ubicacion.precision_m / 1000).toFixed(1)} km`
+                  : `${Math.round(ubicacion.ubicacion.precision_m)} m`}{' '}
+                de donde usted está, y así es difícil que alguien lo encuentre.
+                <div className="acciones-precision">
+                  <button type="button" onClick={() => void solicitarUbicacion()}>
+                    Intentar de nuevo
+                  </button>
+                  <button
+                    type="button"
+                    className="enlace"
+                    onClick={() => setMostrarManual(true)}
+                  >
+                    escribir las coordenadas a mano
+                  </button>
+                </div>
+                <small>
+                  Suele mejorar si sale al aire libre o si le da permiso de ubicación a la
+                  aplicación. Si no puede, envíelo igual y describa el sitio con
+                  referencias.
+                </small>
+              </div>
+            )}
 
           {ubicacion.fase === 'error' && (
             <p className="error" role="alert">
@@ -540,6 +612,12 @@ export function Reportar() {
           </button>
         </section>
       )}
+
+      {/* La bandeja de arriba muestra lo que este teléfono envió; esto sirve
+          para cualquier código, también el de un vecino o el que alguien dictó
+          por teléfono. Va al final porque quien abre la app casi siempre viene
+          a reportar, no a consultar. */}
+      <ConsultarCaso />
     </div>
   );
 }

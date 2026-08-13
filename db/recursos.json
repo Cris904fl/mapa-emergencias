@@ -1,0 +1,100 @@
+[
+  {
+    "nombre": "Hospital Universitario San Ignacio",
+    "tipo": "HOSPITAL",
+    "lat": 4.629157,
+    "lng": -74.06712,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital Militar Central",
+    "tipo": "HOSPITAL",
+    "lat": 4.634544,
+    "lng": -74.061628,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Fundación Santa Fe de Bogotá",
+    "tipo": "HOSPITAL",
+    "lat": 4.696564,
+    "lng": -74.032925,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital Simón Bolívar",
+    "tipo": "HOSPITAL",
+    "lat": 4.742133,
+    "lng": -74.023029,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital El Tunal",
+    "tipo": "HOSPITAL",
+    "lat": 4.571508,
+    "lng": -74.128247,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital de Kennedy",
+    "tipo": "HOSPITAL",
+    "lat": 4.616263,
+    "lng": -74.153411,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital La Victoria",
+    "tipo": "HOSPITAL",
+    "lat": 4.552623,
+    "lng": -74.094322,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital de San José",
+    "tipo": "HOSPITAL",
+    "lat": 4.603339,
+    "lng": -74.086385,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Hospital de Suba",
+    "tipo": "HOSPITAL",
+    "lat": 4.753379,
+    "lng": -74.09184,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Estación de Bomberos Puente Aranda B-4",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.645355,
+    "lng": -74.113027,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Estación de bomberos Chapinero B-1",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.647972,
+    "lng": -74.0624,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Estación de Bomberos Alejandro Lince Kennedy B-5",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.620285,
+    "lng": -74.160075,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Defensa Civil Colombiana",
+    "tipo": "EQUIPO_RESCATE",
+    "lat": 4.639249,
+    "lng": -74.067219,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  },
+  {
+    "nombre": "Cruz Roja Colombiana",
+    "tipo": "EQUIPO_RESCATE",
+    "lat": 4.672844,
+    "lng": -74.089344,
+    "notas": "Ubicación tomada de OpenStreetMap (ODbL). Verificar antes de operar."
+  }
+]

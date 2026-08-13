@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { bd } from '../db/pool.ts';
+import { almacen } from '../servicios/almacen.ts';
 import { iaHabilitada, config } from '../config.ts';
 import { obtenerProveedor } from '../servicios/ia/proveedores.ts';
 
@@ -43,6 +44,22 @@ export async function rutasSalud(app: FastifyInstance): Promise<void> {
         detalle: error instanceof Error ? error.message : String(error),
       };
     }
+
+    /**
+     * Dónde van a parar las fotos.
+     *
+     * Tampoco cuenta para el estado de «listo» —un reporte sin foto sigue
+     * sirviendo— pero se informa porque el modo disco en un hospedaje efímero
+     * pierde los archivos **en silencio**: la subida responde 201, la foto
+     * queda en la base, y desaparece en el siguiente reinicio. Verlo acá evita
+     * descubrirlo cuando alguien pregunte por una foto que ya no está.
+     */
+    comprobaciones.almacen_medios = {
+      ok: true,
+      detalle:
+        almacen.descripcion +
+        (config.SUPABASE_URL ? '' : ' · efímero si el disco no es persistente'),
+    };
 
     // La IA no cuenta para el estado de "listo": es una comodidad, no un
     // requisito para recibir reportes. Se informa con detalle porque un

@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.ts';
@@ -26,6 +25,7 @@ import {
 import { calcularPrioridad, pesosVigentes, refrescarPrioridad } from '../servicios/prioridad.ts';
 import { triarReporteConIa } from '../servicios/triage.ts';
 import { encolarTriage, encolarEtiquetadoImagen } from '../trabajadores/colas.ts';
+import { almacen } from '../servicios/almacen.ts';
 
 export async function rutasReportes(app: FastifyInstance): Promise<void> {
   /**
@@ -221,10 +221,8 @@ export async function rutasReportes(app: FastifyInstance): Promise<void> {
     // Se reparte en subdirectorios por los dos primeros bytes del hash para no
     // dejar decenas de miles de archivos en una sola carpeta.
     const llaveAlmacen = path.posix.join(sha256.slice(0, 2), sha256.slice(2, 4), sha256);
-    const destino = path.resolve(config.ALMACEN_MEDIOS, llaveAlmacen);
 
-    await mkdir(path.dirname(destino), { recursive: true });
-    await writeFile(destino, bytes);
+    await almacen.guardar(llaveAlmacen, bytes, tipoMime);
 
     try {
       const { rows: insertadas } = await bd.consultar<{ id: string }>(
@@ -262,17 +260,9 @@ export async function rutasReportes(app: FastifyInstance): Promise<void> {
     const medio = rows[0];
     if (!medio) throw noEncontrado('El medio');
 
-    const ruta = path.resolve(config.ALMACEN_MEDIOS, medio.llave_almacen);
-
-    // La llave viene de la base y se derivó de un SHA-256 hexadecimal, así que
-    // no puede contener saltos de directorio. Se verifica igual: el costo es
-    // nulo y protege ante datos manipulados por otra vía.
-    const raizAlmacen = path.resolve(config.ALMACEN_MEDIOS);
-    if (!ruta.startsWith(raizAlmacen + path.sep)) {
-      throw solicitudInvalida('Llave de almacén inválida');
-    }
-
-    const bytes = await readFile(ruta).catch(() => null);
+    // La validación de la llave vive dentro del almacén en disco, que es el
+    // único que puede sufrir saltos de directorio.
+    const bytes = await almacen.leer(medio.llave_almacen);
     if (!bytes) throw noEncontrado('El archivo del medio');
 
     return respuesta.type(medio.tipo_mime).send(bytes);

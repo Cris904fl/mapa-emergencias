@@ -1,8 +1,7 @@
 import { Worker } from 'bullmq';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { config, iaHabilitada } from '../config.ts';
 import { bd, cerrarPool } from '../db/pool.ts';
+import { almacen } from '../servicios/almacen.ts';
 import { triarReporteConIa } from '../servicios/triage.ts';
 import { etiquetarImagen } from '../servicios/ia/imagen.ts';
 import { refrescarPrioridadesVencidas } from '../servicios/prioridad.ts';
@@ -64,8 +63,7 @@ const trabajadorImagenes = new Worker<{ medioId: string }>(
     const medio = rows[0];
     if (!medio) return { estado: 'omitida', motivo: 'El medio no existe o no es una foto' };
 
-    const ruta = path.resolve(config.ALMACEN_MEDIOS, medio.llave_almacen);
-    const bytes = await readFile(ruta).catch(() => null);
+    const bytes = await almacen.leer(medio.llave_almacen);
     if (!bytes) return { estado: 'omitida', motivo: 'No se encontró el archivo en el almacén' };
 
     const resultado = await etiquetarImagen(bytes, medio.tipo_mime);

@@ -29,6 +29,22 @@ const esquema = z.object({
   ALMACEN_MEDIOS: z.string().default('./almacen'),
 
   /**
+   * Almacenamiento de objetos para fotos, video y audio.
+   *
+   * Con las tres puestas, los medios van a Supabase Storage; sin ellas, a
+   * disco. Hace falta en cualquier hospedaje con disco efímero: en la capa
+   * gratuita de Render el sistema de archivos se borra en cada redespliegue y
+   * cada vez que la instancia hiberna, así que las fotos se perdían solas.
+   *
+   * `SUPABASE_CLAVE_SERVICIO` es la clave de rol de servicio del proyecto:
+   * salta las políticas de acceso, así que va como variable secreta y nunca en
+   * el repositorio.
+   */
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_CLAVE_SERVICIO: z.string().min(20).optional(),
+  SUPABASE_BUCKET: z.string().default('medios-reportes'),
+
+  /**
    * Secreto para la ruta de mantenimiento que refresca prioridades.
    *
    * Solo hace falta en un despliegue sin Redis, donde un cron externo reemplaza
