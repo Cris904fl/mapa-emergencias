@@ -24,7 +24,13 @@ import { estadoPermiso, suscribirseAReporte } from '../lib/notificaciones.ts';
  *      escombros no va a llenar ocho campos.
  *   3. Los conteos de personas se piden aparte del texto porque quien está en el
  *      sitio contando es mejor fuente que un modelo leyendo su prosa. Si los
- *      deja vacíos, la extracción automática los completa desde el texto.
+ *      deja vacíos, la extracción automática puede completarlos desde el texto
+ *      *cuando está habilitada* — en producción hoy corre con
+ *      `IA_PROVEEDOR=ninguno`, así que no corre. Por eso esta pantalla no se lo
+ *      promete a nadie.
+ *   4. Ningún texto de esta pantalla puede prometer una respuesta que el sistema
+ *      no está dando. Mientras no haya una entidad de socorro de guardia, se
+ *      dice, y se manda a la línea oficial a quien tiene una vida en riesgo.
  */
 
 const CATEGORIAS: { valor: string; etiqueta: string; ayuda: string }[] = [
@@ -252,6 +258,23 @@ export function Reportar() {
     : undefined;
 
   /**
+   * ¿Lo que acabó de reportar es de vida o muerte?
+   *
+   * El aviso de la cabecera lo vio antes de llenar el formulario, cuando todavía
+   * no sabía que su caso era crítico. Al confirmar sí se sabe —lo dijo él— y es
+   * el momento en que conviene repetirlo: acaba de hacer algo que se siente como
+   * pedir ayuda, y esa sensación es justo la que hace que no llame.
+   *
+   * Se lee de la bandeja y no del formulario porque el formulario ya se limpió.
+   */
+  const recienGuardadoEsCritico =
+    recienGuardado !== undefined &&
+    (recienGuardado.carga.severidad === 'CRITICA' ||
+      recienGuardado.carga.requiere_rescate ||
+      recienGuardado.carga.personas_atrapadas > 0 ||
+      recienGuardado.carga.personas_heridas > 0);
+
+  /**
    * Ofrecer los avisos cuando el reporte queda confirmado por el servidor.
    *
    * Se espera a la confirmación y no al guardado local porque hasta que no hay
@@ -292,6 +315,30 @@ export function Reportar() {
         </p>
       </header>
 
+      {/* Lo primero que ve quien abre la aplicación, y va antes del formulario a
+          propósito.
+
+          En la beta entraron reportes de personas atrapadas que se quedaron en
+          «RECIBIDO» durante horas porque no hay nadie de guardia mirando el
+          tablero. Una aplicación que recibe eso sin decir que no despacha a
+          nadie está haciendo una promesa que no cumple, y el costo lo paga
+          quien esperó en vez de llamar.
+
+          El 123 va como enlace `tel:` porque en un celular eso es un toque, y
+          quien lo necesita no está en condiciones de copiar un número. */}
+      <div className="aviso-linea-oficial" role="note">
+        <strong>
+          Si hay vidas en peligro, llame primero al <a href="tel:123">123</a>.
+        </strong>{' '}
+        Esta aplicación no reemplaza a la línea oficial de emergencias: es un
+        piloto en prueba y todavía no hay una entidad de socorro de guardia
+        atendiendo estos reportes.
+        <small>
+          Repórtelo aquí también: queda registrado con su ubicación y su hora, y
+          eso es lo que después permite ver dónde se necesita ayuda.
+        </small>
+      </div>
+
       {recienGuardado && (
         <div
           className={`confirmacion ${recienGuardado.estado === 'confirmado' ? 'enviada' : 'guardada'}`}
@@ -314,9 +361,13 @@ export function Reportar() {
                   tiene una respuesta obvia. */}
               {avisos === 'ofrecer' && recienGuardado.codigo_publico && (
                 <div className="ofrecer-avisos">
+                  {/* «cuando alguien tome su caso» presuponía que alguien lo
+                      iba a tomar. Con 6 de 7 reportes de la beta sin revisar,
+                      ese «cuando» es una promesa; «si» es lo que el sistema
+                      puede sostener. */}
                   <p>
-                    ¿Quiere que le avisemos cuando alguien tome su caso, llegue al
-                    sitio o lo cierre?
+                    ¿Quiere que le avisemos si alguien toma su caso, llega al sitio
+                    o lo cierra?
                   </p>
                   <div className="acciones-confirmacion">
                     <button
@@ -335,7 +386,7 @@ export function Reportar() {
 
               {avisos === 'activo' && (
                 <p className="avisos-activos">
-                  Le avisaremos a este teléfono cuando su caso avance.
+                  Le avisaremos a este teléfono si su caso avanza.
                 </p>
               )}
 
@@ -374,6 +425,16 @@ export function Reportar() {
               <strong>Reporte guardado en este dispositivo.</strong> Se enviará solo
               cuando haya señal. No hace falta que deje la aplicación abierta.
             </>
+          )}
+
+          {/* Va en las dos ramas —enviado y guardado sin señal— y en la segunda
+              importa más: el reporte todavía no ha salido del teléfono. */}
+          {recienGuardadoEsCritico && (
+            <p className="recordar-linea-oficial">
+              Reportó algo con vidas en riesgo. <strong>Llame al{' '}
+              <a href="tel:123">123</a></strong>: este reporte no despacha una
+              ambulancia ni un equipo de rescate.
+            </p>
           )}
         </div>
       )}
@@ -526,9 +587,15 @@ export function Reportar() {
               maxLength={4000}
               placeholder="Ej: estamos atrapados en una casa cerca del parque, somos 5 y una señora está herida."
             />
+            {/* Decía «el sistema lee este texto para completar los datos que no
+                llenó; una persona revisa antes de despachar». Las dos mitades
+                eran falsas en producción: la extracción corre con
+                `IA_PROVEEDOR=ninguno`, y no hay nadie revisando ni despachando.
+                Prometer una revisión humana que no existe es lo que hace que
+                alguien se quede esperando. */}
             <small>
-              Escriba como hable. El sistema lee este texto para completar los datos
-              que no llenó; una persona revisa antes de despachar.
+              Escriba como hable. Es lo que mejor explica qué está pasando y queda
+              tal cual en el reporte.
             </small>
           </label>
         </fieldset>

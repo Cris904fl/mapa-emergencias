@@ -1691,6 +1691,52 @@ button.entrada-leyenda:focus-visible {
 /* Antes la precisión iba en letra pequeña y alguien envió un reporte con 2 km
    de error igual. Esto se ve; y ofrece la salida sin bloquear el envío. */
 
+/* ---- La línea oficial de emergencias ----
+ *
+ * Usa el rojo de alarma y no el ámbar de aviso, y es el único elemento de la
+ * pantalla ciudadana que lo hace. No es jerarquía visual por gusto: mientras no
+ * haya nadie de guardia sobre estos reportes, marcar el 123 es la acción más
+ * importante que puede tomar quien abre esta aplicación, y tiene que ganarle al
+ * botón de enviar.
+ */
+
+.aviso-linea-oficial {
+  background: #fef2f2;
+  border: 1px solid var(--alarma);
+  border-left-width: 4px;
+  border-radius: var(--radio);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+  color: var(--tinta);
+}
+
+.aviso-linea-oficial small {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--tinta-suave);
+  font-size: 0.88rem;
+}
+
+.recordar-linea-oficial {
+  margin: 0.8rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgb(15 23 42 / 10%);
+  font-size: 0.95rem;
+}
+
+/* El número es un enlace `tel:`: en el celular se marca con un toque. Se
+   subraya y se agranda para que se lea como algo que se puede pulsar, no como
+   un dato más de la frase. */
+.aviso-linea-oficial a,
+.recordar-linea-oficial a {
+  color: var(--alarma);
+  font-weight: 700;
+  font-size: 1.08em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .aviso-precision {
   background: #fffbeb;
   border: 1px solid var(--aviso);

@@ -17,7 +17,9 @@ import { api, ErrorApi, type CasoConsultado } from '../lib/api.ts';
 const ESTADOS_LEGIBLES: Record<string, { titulo: string; explicacion: string }> = {
   RECIBIDO: {
     titulo: 'Recibido',
-    explicacion: 'Su reporte llegó y está en la lista. Todavía nadie lo ha revisado.',
+    explicacion:
+      'Su reporte llegó y está en la lista. Todavía nadie lo ha revisado, y no hay ' +
+      'un plazo para que lo hagan.',
   },
   EN_TRIAGE: {
     titulo: 'En revisión',
@@ -128,6 +130,20 @@ export function ConsultarCaso() {
             <span className="etiqueta-estado">{estado?.titulo ?? caso.properties.estado}</span>
             <p>{estado?.explicacion ?? ''}</p>
           </div>
+
+          {/* Quien llega hasta acá vino a preguntar «¿alguien vio lo que mandé?»,
+              y con el sistema como está hoy la respuesta suele ser que no.
+              Decírselo sin darle a dónde acudir sería dejarlo peor que antes de
+              consultar. */}
+          {caso.properties.estado === 'RECIBIDO' && (
+            <p className="recordar-linea-oficial">
+              Si sigue siendo una emergencia, no espere por aquí:{' '}
+              <strong>
+                llame al <a href="tel:123">123</a>
+              </strong>
+              .
+            </p>
+          )}
 
           <dl className="datos-caso">
             <dt>Código</dt>
