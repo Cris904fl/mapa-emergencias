@@ -59,6 +59,8 @@
  * nivel es correcto y dos son ambiguos.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import pg from 'pg';
 
 const RAIZ = 'https://portalgis.dane.gov.co/mparcgis/rest/services/Hosted';
@@ -419,6 +421,44 @@ async function descargarPoblacion() {
   return porCodigo;
 }
 
+/**
+ * La población de las localidades de Bogotá, del CSV del repositorio.
+ *
+ * No se baja de ningún servicio porque no hay: la Secretaría Distrital de
+ * Planeación lo publica solo en ODS. `scripts/derivar-poblacion-localidades.mjs`
+ * convierte esa hoja en este CSV, y acá solo se lee.
+ *
+ * El año sale del propio archivo y no de una constante de este script: si alguien
+ * regenera el CSV para otro año, el dato que se guarda en `poblacion_anio` tiene
+ * que moverse con él, no quedarse mintiendo.
+ *
+ * Devuelve `null` si el archivo no está, para que el cargador siga sirviendo sin
+ * él en vez de fallar por un dato opcional.
+ */
+function leerPoblacionLocalidades(prefijo) {
+  const ruta = path.resolve('db', 'poblacion-localidades-bogota.csv');
+
+  let texto;
+  try {
+    texto = readFileSync(ruta, 'utf8');
+  } catch {
+    return null;
+  }
+
+  const anio = Number(/año\s+(\d{4})/i.exec(texto)?.[1]);
+  const porCodigo = new Map();
+
+  for (const linea of texto.split(/\r?\n/)) {
+    if (!linea || linea.startsWith('#') || linea.startsWith('codigo,')) continue;
+    const [codigo, , habitantes] = linea.split(',');
+    const n = Number(habitantes);
+    if (codigo && Number.isFinite(n)) porCodigo.set(prefijo + codigo.trim(), Math.round(n));
+  }
+
+  if (!Number.isInteger(anio) || porCodigo.size === 0) return null;
+  return { anio, porCodigo };
+}
+
 // ---------------------------------------------------------------- descarga
 
 /**
@@ -678,6 +718,40 @@ try {
     console.log(`  POBLACIÓN: ${rowCount} lugar(es) con población del censo ${POBLACION.anio}`);
   }
 
+  /**
+   * La población de las localidades, que viene de otra fuente y otro año.
+   *
+   * Va aparte del `UPDATE` de los municipios porque el año es distinto y
+   * `poblacion_anio` tiene que decir la verdad de cada fila. Y es distinto no por
+   * descuido: el censo cuenta a quien encontró, la serie distrital corrige la
+   * omisión censal, y para Bogotá 2018 eso son 3,2 % de diferencia. La misma
+   * cifra para el mismo año y el mismo territorio, medida de dos maneras.
+   */
+  if (conPoblacion) {
+    const localidades = NIVELES.find((n) => n.tipo === 'LOCALIDAD');
+    const csv = leerPoblacionLocalidades(localidades.prefijoCodigo);
+
+    if (!csv) {
+      console.log(
+        '  POBLACIÓN: sin db/poblacion-localidades-bogota.csv, las localidades quedan sin población.',
+      );
+    } else {
+      const { rowCount } = await cliente.query(
+        `UPDATE lugares AS l
+            SET poblacion = p.habitantes,
+                poblacion_anio = $3
+           FROM unnest($1::text[], $2::int[]) AS p(codigo, habitantes)
+          WHERE l.codigo = p.codigo`,
+        [[...csv.porCodigo.keys()], [...csv.porCodigo.values()], csv.anio],
+      );
+      console.log(
+        rowCount > 0
+          ? `  POBLACIÓN: ${rowCount} localidad(es) con población distrital de ${csv.anio}`
+          : '  POBLACIÓN: ninguna localidad cargada todavía (use --con-localidades)',
+      );
+    }
+  }
+
   const { rows: resumen } = await cliente.query(
     `SELECT tipo::text, count(*)::int AS n,
             count(padre_id)::int AS con_padre,
@@ -771,7 +845,10 @@ try {
         GROUP BY l.nombre ORDER BY n DESC, l.nombre LIMIT 10`,
     );
     if (porZona.length > 0) {
-      console.log('\nReportes por zona:');
+      // «Todos los estados» no es un detalle: el panel de zonas del tablero
+      // cuenta solo los abiertos, así que estos números pueden ser mayores y sin
+      // la etiqueta parecería que uno de los dos está mal.
+      console.log('\nReportes por zona (todos los estados):');
       porZona.forEach((f) => console.log(`  · ${f.nombre.padEnd(28)} ${f.n}`));
     }
   }
