@@ -10,9 +10,13 @@
   //   · Deploy command: npx wrangler deploy
   //   · Variable:       API_ORIGEN = https://mapa-emergencias.onrender.com
   // El nombre es la primera etiqueta de la URL pública:
-  // <name>.<subdominio-de-cuenta>.workers.dev. Corto a propósito — esta
-  // dirección se va a dictar por teléfono y por radio.
-  "name": "mapa",
+  // <name>.<subdominio-de-cuenta>.workers.dev
+  //
+  // Se intentó acortarlo a «mapa» y no funcionó: la construcción de Cloudflare
+  // está atada al servicio que ya existe, así que renombrarlo aquí no crea el
+  // servicio nuevo — deja la configuración mintiendo sobre lo desplegado. Se
+  // deja el nombre real.
+  "name": "mapa-emergencias",
   "main": "worker/index.js",
   "compatibility_date": "2026-08-01",
 
