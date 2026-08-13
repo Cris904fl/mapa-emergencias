@@ -95,12 +95,34 @@ function almacenEnSupabase(urlBase: string, clave: string, bucket: string): Alma
       }
     },
 
+    /**
+     * Devuelve `null` cuando el objeto no está, y lanza solo cuando el almacén
+     * falló de verdad.
+     *
+     * La distinción importa porque hay un medio huérfano en producción —la fila
+     * existe en `medios_reporte` y el archivo no, de cuando iban al disco
+     * efímero de Render— y **Supabase Storage no contesta 404 para eso**:
+     * contesta `400` con un cuerpo que dice `"error":"not_found"`. Con solo
+     * mirar el código de estado, una condición conocida y esperada salía como
+     * `500 error_interno`, se registraba con detalle en cada petición, y la
+     * pantalla del ciudadano le echaba la culpa a su señal.
+     *
+     * Un 400 que no sea «no está» sí se lanza, y ahora con el cuerpo incluido:
+     * significaría que la llave que armamos está mal, y eso hay que verlo, no
+     * confundirlo con un archivo perdido.
+     */
     async leer(llave) {
       const respuesta = await fetch(`${raiz}/${bucket}/${llave}`, { headers: cabeceras });
       if (respuesta.status === 404) return null;
+
       if (!respuesta.ok) {
-        throw new Error(`Supabase Storage falló al leer (HTTP ${respuesta.status})`);
+        const detalle = await respuesta.text().catch(() => '');
+        if (/not.?found/i.test(detalle)) return null;
+        throw new Error(
+          `Supabase Storage falló al leer (HTTP ${respuesta.status}): ${detalle.slice(0, 200)}`,
+        );
       }
+
       return Buffer.from(await respuesta.arrayBuffer());
     },
   };

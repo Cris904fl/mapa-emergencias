@@ -1691,6 +1691,75 @@ button.entrada-leyenda:focus-visible {
 /* Antes la precisión iba en letra pequeña y alguien envió un reporte con 2 km
    de error igual. Esto se ve; y ofrece la salida sin bloquear el envío. */
 
+/* --------------------------------------------- fotos, audio y video
+ *
+ * Miniaturas de 96 px en una fila que envuelve. No se estiran a lo ancho de la
+ * tarjeta porque en campo esto compite por espacio con la distancia, los
+ * conteos y los botones de acción, que se usan con una mano y con prisa: la
+ * foto informa la decisión, no es la decisión.
+ *
+ * `object-fit: cover` recorta en vez de deformar. Una casa inundada estirada
+ * verticalmente deja de leerse como lo que es, y aquí lo único que importa es
+ * reconocer la escena de un vistazo.
+ */
+
+.galeria-medios {
+  margin: 0.6rem 0 0;
+}
+
+.galeria-medios h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tenue);
+}
+
+.galeria-medios ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.miniatura {
+  display: block;
+  text-decoration: none;
+  color: var(--tenue);
+  line-height: 1.2;
+}
+
+.miniatura img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--linea);
+  background: var(--fondo);
+}
+
+.miniatura small {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.medio-fallido,
+.enlace-medio {
+  font-size: 0.85rem;
+  color: var(--tenue);
+  margin: 0;
+}
+
+.galeria-medios audio {
+  width: 100%;
+  max-width: 320px;
+}
+
 /* ---- La línea oficial de emergencias ----
  *
  * Usa el rojo de alarma y no el ámbar de aviso, y es el único elemento de la

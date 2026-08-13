@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, ErrorApi, type CasoConsultado } from '../lib/api.ts';
+import { GaleriaMedios } from './GaleriaMedios.tsx';
 
 /**
  * Consulta de un caso por su código público.
@@ -161,6 +162,12 @@ export function ConsultarCaso() {
               </>
             )}
           </dl>
+
+          {/* La foto se muestra acá por una razón distinta a la del rescatista:
+              no es para ver el daño —quien reportó estaba ahí— sino para
+              confirmar que la subida funcionó. La app dice «se envían después
+              del reporte» y hasta ahora no volvía a mencionarlo nunca. */}
+          <GaleriaMedios medios={caso.medios} titulo="Lo que usted envió" />
 
           {/* La bitácora es lo que de verdad responde «¿alguien vio esto?».
               Se muestra completa y en orden: no hay nada que esconderle a

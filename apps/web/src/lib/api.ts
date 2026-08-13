@@ -158,6 +158,25 @@ export type NombreFiltro =
 export type Severidad = 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA' | 'DESCONOCIDA';
 
 /**
+ * Un archivo adjunto a un reporte.
+ *
+ * `bytes` llega como texto y no como número: es un `bigint` en la base y el
+ * driver lo entrega así a propósito (ver HANDOFF §5). Se convierte donde se
+ * muestra, no acá.
+ *
+ * Se omiten `etiquetas_ia`, `modelo_ia` y `analizado_en`, que la API sí
+ * devuelve: el etiquetado multimodal nunca se ha ejecutado, así que declarar su
+ * forma sería inventarla.
+ */
+export type Medio = {
+  id: string;
+  tipo: 'FOTO' | 'VIDEO' | 'AUDIO';
+  tipo_mime: string;
+  bytes: string;
+  capturado_en: string | null;
+};
+
+/**
  * Un reporte visto por quien lo hizo, buscado con su código público.
  *
  * Se declara solo lo que la pantalla de consulta necesita: el detalle completo
@@ -175,6 +194,7 @@ export type CasoConsultado = {
     reportado_en: string;
     primera_respuesta_en: string | null;
   };
+  medios: Medio[];
   historial: {
     estado_nuevo: string;
     estado_anterior: string | null;
@@ -335,6 +355,20 @@ export const api = {
     pedir<CasoConsultado>(
       `/v1/reportes/codigo/${encodeURIComponent(codigo.trim().toUpperCase())}`,
     ),
+
+  /**
+   * Los archivos de un reporte, por su id.
+   *
+   * Existe para la vista de campo: `GET /v1/campo/casos` sale de
+   * `v_casos_campo`, que no trae los medios, y agregárselos obligaría a que cada
+   * consulta de la cola cargara la lista de archivos de veinte reportes para
+   * mostrar los de uno. Se pide el detalle solo del caso que se va a mirar.
+   *
+   * Devuelve solo `medios` de todo el detalle: es lo único que hace falta y
+   * declarar el resto sería declarar lo que no se usa.
+   */
+  mediosDelReporte: (id: string) =>
+    pedir<{ medios: Medio[] }>(`/v1/reportes/${encodeURIComponent(id)}`).then((r) => r.medios),
 
   cambiarEstado: (id: string, estado: string, nota?: string) =>
     pedir<Record<string, unknown>>(`/v1/reportes/${id}/estado`, {

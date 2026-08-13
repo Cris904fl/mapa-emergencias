@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Acceso } from '../componentes/Acceso.tsx';
+import { GaleriaMedios } from '../componentes/GaleriaMedios.tsx';
 import {
   api,
   tieneSesion,
   ErrorApi,
   type CasoCampo,
+  type Medio,
   type RutaCaso,
 } from '../lib/api.ts';
 import { describirPrecision, obtenerUbicacion, type Ubicacion } from '../lib/geo.ts';
@@ -321,6 +323,53 @@ export function Campo() {
   );
 }
 
+/**
+ * Las fotos del caso, en la vista de campo.
+ *
+ * Se cargan solas en **los casos propios** —el rescatista va para allá y son
+ * pocos— y a demanda en la lista de cercanos, que puede traer veinte: bajar las
+ * fotos de todos para mirar una sería gastarle los datos del plan a alguien que
+ * está trabajando en la calle.
+ *
+ * Cuando el reporte no trae nada se dice, en vez de no mostrar nada. «No hay
+ * fotos» y «no cargaron las fotos» llevan a decisiones distintas cuando uno está
+ * decidiendo si va.
+ */
+function FotosDelCaso({ reporteId, autocargar }: { reporteId: string; autocargar: boolean }) {
+  const [medios, setMedios] = useState<Medio[] | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [fallo, setFallo] = useState(false);
+
+  const cargar = useCallback(async () => {
+    setCargando(true);
+    setFallo(false);
+    try {
+      setMedios(await api.mediosDelReporte(reporteId));
+    } catch {
+      setFallo(true);
+    } finally {
+      setCargando(false);
+    }
+  }, [reporteId]);
+
+  useEffect(() => {
+    if (autocargar) void cargar();
+  }, [autocargar, cargar]);
+
+  if (medios === null) {
+    if (cargando) return <p className="cargando">Buscando fotos…</p>;
+    return (
+      <button type="button" className="enlace" onClick={() => void cargar()}>
+        {fallo ? 'no cargaron las fotos, reintentar' : 'ver fotos'}
+      </button>
+    );
+  }
+
+  if (medios.length === 0) return <p className="nota-campo">Sin fotos en este reporte.</p>;
+
+  return <GaleriaMedios medios={medios} titulo="Lo que envió quien reportó" />;
+}
+
 function TarjetaCaso({
   caso,
   ocupado,
@@ -390,6 +439,8 @@ function TarjetaCaso({
       </div>
 
       {caso.descripcion && <p className="descripcion">«{caso.descripcion}»</p>}
+
+      <FotosDelCaso reporteId={caso.id} autocargar={caso.es_mio} />
 
       {caso.contacto_reportante && (
         <p className="contacto">
