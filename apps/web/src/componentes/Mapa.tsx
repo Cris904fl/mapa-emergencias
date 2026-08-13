@@ -48,6 +48,18 @@ type Props = {
   recursos: ColeccionGeoJson | null;
   personal?: PersonalCampo[] | null;
   onSeleccionar?: (id: string) => void;
+  /**
+   * Punto al que volar cuando cambia.
+   *
+   * Lo usa la cola de atención: tocar un reporte de la lista lleva el mapa
+   * hasta donde ocurrió. Sin esto, el operador tiene que buscar a ojo entre
+   * decenas de puntos cuál es el que acaba de leer, que es justo el trabajo
+   * que el tablero debería ahorrarle.
+   *
+   * Lleva `clave` para poder volver a volar al mismo sitio: si solo dependiera
+   * de las coordenadas, tocar dos veces el mismo reporte no haría nada.
+   */
+  enfocar?: { lat: number; lng: number; clave: string } | null;
   /** Severidad activa, para marcar cuál entrada de la leyenda está pulsada. */
   severidad?: Severidad | null;
   /** Si se pasa, las entradas de severidad de la leyenda se vuelven botones. */
@@ -113,6 +125,7 @@ export function Mapa({
   onSeleccionar,
   severidad,
   onFiltrarSeveridad,
+  enfocar,
 }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<MapaLibre | null>(null);
@@ -372,6 +385,32 @@ export function Mapa({
     if (listo.current) aplicar();
     else instancia.once('load', aplicar);
   }, [recursos]);
+
+  /**
+   * Volar al reporte que se tocó en la cola.
+   *
+   * `flyTo` y no `jumpTo` a propósito: el desplazamiento animado deja ver hacia
+   * dónde se movió el mapa. Un salto instantáneo obliga a reorientarse desde
+   * cero, y en una sala de crisis eso es medio segundo perdido en cada consulta.
+   *
+   * El zoom se fija en 16 —aproximadamente una manzana— porque es la escala a
+   * la que se decide a quién mandar. Si el operador ya estaba más cerca, se
+   * respeta su encuadre.
+   */
+  useEffect(() => {
+    const instancia = mapa.current;
+    if (!instancia || !enfocar) return;
+
+    const volar = () =>
+      instancia.flyTo({
+        center: [enfocar.lng, enfocar.lat],
+        zoom: Math.max(instancia.getZoom(), 16),
+        duration: 900,
+      });
+
+    if (listo.current) volar();
+    else instancia.once('load', volar);
+  }, [enfocar]);
 
   useEffect(() => {
     const instancia = mapa.current;

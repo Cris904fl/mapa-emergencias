@@ -1739,3 +1739,24 @@ button.entrada-leyenda:focus-visible {
 .boton-compartir:hover {
   filter: brightness(0.95);
 }
+
+/* La fila de la cola es pulsable: lleva el mapa hasta el reporte. */
+.fila-cola {
+  cursor: pointer;
+}
+
+.fila-cola:hover {
+  background: var(--acento-claro);
+}
+
+.ver-en-mapa {
+  font-size: 0.82rem;
+}
+
+/* Reemplaza al botón «intentar enviar ahora» cuando no hace falta: dice qué
+   está pasando en vez de ofrecer una acción que ya está ocurriendo sola. */
+.estado-bandeja {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  color: var(--tinta-suave);
+}

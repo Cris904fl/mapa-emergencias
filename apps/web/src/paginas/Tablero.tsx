@@ -62,6 +62,17 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
   const [avisoPersonal, setAvisoPersonal] = useState<string | null>(null);
 
   /**
+   * Reporte al que el mapa debe volar, elegido tocándolo en la cola.
+   *
+   * Lleva un contador en la clave para que tocar dos veces el mismo reporte
+   * vuelva a centrarlo: es lo que uno hace cuando ya movió el mapa buscando
+   * otra cosa y quiere regresar.
+   */
+  const [enfocar, setEnfocar] = useState<{ lat: number; lng: number; clave: string } | null>(
+    null,
+  );
+
+  /**
    * Filtro activo, elegido tocando una cifra de cabecera. Se aplica a la lista y
    * al mapa a la vez: si el mosaico dice «3 críticos» y el mapa muestra doce
    * puntos, el operador deja de confiar en el tablero.
@@ -224,6 +235,7 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
             recursos={recursosGeo}
             personal={personal}
             onSeleccionar={setExpandido}
+            enfocar={enfocar}
             severidad={severidad}
             onFiltrarSeveridad={(elegida) =>
               setSeveridad(elegida === severidad ? null : elegida)
@@ -247,6 +259,15 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
                 reporte={reporte}
                 expandido={expandido === reporte.id}
                 onAlternar={() => setExpandido(expandido === reporte.id ? null : reporte.id)}
+                onVerEnMapa={() =>
+                  setEnfocar({
+                    lat: reporte.lat,
+                    lng: reporte.lng,
+                    // El instante hace la clave única: sin él, tocar el mismo
+                    // reporte dos veces no volvería a centrarlo.
+                    clave: `${reporte.id}-${Date.now()}`,
+                  })
+                }
                 autenticado={autenticado}
                 onCambio={() => void cargar()}
               />
@@ -519,12 +540,14 @@ function FilaCola({
   reporte,
   expandido,
   onAlternar,
+  onVerEnMapa,
   autenticado,
   onCambio,
 }: {
   reporte: ReporteCola;
   expandido: boolean;
   onAlternar: () => void;
+  onVerEnMapa: () => void;
   autenticado: boolean;
   onCambio: () => void;
 }) {
@@ -547,12 +570,24 @@ function FilaCola({
   }
 
   return (
-    <li className={`fila-cola severidad-${reporte.severidad.toLowerCase()}`}>
+    /* Tocar la fila lleva el mapa hasta el reporte. Va en el <li> y no en un
+       botón que lo envuelva porque adentro ya hay botones —el puntaje, las
+       acciones— y anidarlos sería HTML inválido. Los de adentro detienen la
+       propagación para que abrir el desglose no mueva además el mapa. Para
+       teclado y lectores de pantalla está el botón explícito «ver en el mapa»
+       de la fila de metadatos. */
+    <li
+      className={`fila-cola severidad-${reporte.severidad.toLowerCase()}`}
+      onClick={onVerEnMapa}
+    >
       <div className="cabecera-fila">
         <button
           type="button"
           className="puntaje"
-          onClick={onAlternar}
+          onClick={(evento) => {
+            evento.stopPropagation();
+            onAlternar();
+          }}
           aria-expanded={expandido}
           title="Ver de qué está compuesto este puntaje"
         >
@@ -584,6 +619,16 @@ function FilaCola({
                 : `hace ${minutosEspera} min`}
             </span>
             <span className="estado-reporte">{reporte.estado.toLowerCase()}</span>
+            <button
+              type="button"
+              className="enlace ver-en-mapa"
+              onClick={(evento) => {
+                evento.stopPropagation();
+                onVerEnMapa();
+              }}
+            >
+              ver en el mapa
+            </button>
           </div>
 
           {reporte.descripcion && <p className="descripcion">«{reporte.descripcion}»</p>}
@@ -631,7 +676,9 @@ function FilaCola({
           )}
 
           {autenticado && (
-            <div className="acciones-fila">
+            /* Un solo stopPropagation para todas las acciones: cambiar el
+               estado de un reporte no debe además mover el mapa. */
+            <div className="acciones-fila" onClick={(evento) => evento.stopPropagation()}>
               <button
                 type="button"
                 disabled={ocupado}

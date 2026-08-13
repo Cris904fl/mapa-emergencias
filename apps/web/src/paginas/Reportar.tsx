@@ -85,6 +85,7 @@ export function Reportar() {
   const [guardando, setGuardando] = useState(false);
   const [ultimoGuardado, setUltimoGuardado] = useState<string | null>(null);
   const [bandeja, setBandeja] = useState<ElementoBandeja[]>([]);
+  const [enLinea, setEnLinea] = useState(navigator.onLine);
 
   // Pedir la ubicación al abrir: es el dato que más tarda, así que conviene
   // arrancarlo mientras la persona escoge el tipo de emergencia.
@@ -96,6 +97,18 @@ export function Reportar() {
     const refrescar = () => void listarBandeja().then(setBandeja);
     void refrescar();
     return alCambiarBandeja(refrescar);
+  }, []);
+
+  // La bandeja cambia lo que dice según haya señal o no, así que esta pantalla
+  // necesita saberlo por su cuenta.
+  useEffect(() => {
+    const actualizar = () => setEnLinea(navigator.onLine);
+    window.addEventListener('online', actualizar);
+    window.addEventListener('offline', actualizar);
+    return () => {
+      window.removeEventListener('online', actualizar);
+      window.removeEventListener('offline', actualizar);
+    };
   }, []);
 
   async function solicitarUbicacion() {
@@ -224,6 +237,15 @@ export function Reportar() {
   const pendientes = bandeja.filter(
     (elemento) => elemento.estado === 'pendiente' || elemento.estado === 'enviando',
   );
+
+  /**
+   * Algo lleva varios intentos sin salir aunque haya señal.
+   *
+   * Es el único caso en que un botón manual aporta: el reintento automático ya
+   * corrió y no bastó. Dos intentos es el umbral porque el primero puede fallar
+   * por un arranque en frío del servidor, que es normal y se resuelve solo.
+   */
+  const reintentosFallidos = pendientes.some((elemento) => elemento.intentos >= 2);
 
   return (
     <div className="pagina-reportar">
@@ -607,9 +629,28 @@ export function Reportar() {
               </li>
             ))}
           </ul>
-          <button type="button" onClick={() => void sincronizarBandeja()}>
-            Intentar enviar ahora
-          </button>
+          {/* El botón manual solo aparece cuando de verdad hace falta.
+              Con señal, el sincronizador drena la bandeja solo —al guardar, al
+              volver la conexión y cada 30 segundos—, así que ofrecer «intentar
+              enviar ahora» invita a pulsar algo que ya está pasando y hace
+              dudar de si el reporte salió. Sin señal tampoco sirve: no hay a
+              dónde enviar. Queda para el único caso donde aporta: hay conexión
+              y aun así algo no ha salido tras varios intentos. */}
+          {pendientes.length > 0 && (
+            <p className="estado-bandeja">
+              {!enLinea
+                ? 'Sin señal. Se enviarán solos cuando vuelva la conexión; no hace falta dejar la aplicación abierta.'
+                : reintentosFallidos
+                  ? 'Están tardando más de lo normal.'
+                  : 'Enviándose…'}
+            </p>
+          )}
+
+          {enLinea && reintentosFallidos && (
+            <button type="button" onClick={() => void sincronizarBandeja()}>
+              Intentar enviar ahora
+            </button>
+          )}
         </section>
       )}
 
