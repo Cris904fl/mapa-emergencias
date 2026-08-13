@@ -175,7 +175,7 @@ que existen antes de pelear con ellas:
    directo a la API por su dominio, la bandeja de salida —lo que reintenta el
    reporte cuando vuelve la señal— dejaría de funcionar. En desarrollo lo
    resuelve el proxy de Vite; en producción lo resuelve
-   `apps/web/functions/v1/[[ruta]].js`, que reenvía a la API y de paso pasa la
+   `worker/index.js`, que reenvía a la API y de paso pasa la
    IP real del visitante para que el límite de tasa siga siendo por persona y no
    uno solo para todo el mundo.
 
@@ -207,10 +207,27 @@ es instantáneo aunque la API esté dormida.
    `npm run iniciar --workspace=@emergencias/api`. Variables mínimas:
    `DATABASE_URL`, `JWT_SECRETO` (16+ caracteres), `NODE_ENV=production`,
    `IA_PROVEEDOR=ninguno`, `SECRETO_MANTENIMIENTO` (16+).
-4. **Cloudflare Pages**: directorio raíz `apps/web`, comando de construcción
-   `npm run construir`, salida `dist`, y la variable `API_ORIGEN` con la URL de
-   la API del paso 3. No hace falta `VITE_API_URL`: eso es solo para el proxy de
-   desarrollo.
+4. **Cloudflare Workers** (agosto de 2026: el panel ya **no** ofrece crear
+   proyectos de Pages; todo pasa por Workers, que sirve archivos estáticos con
+   un binding de *assets*). *Workers & Pages → Create application → Continue
+   with GitHub → `mapa-emergencias`*.
+
+   | Campo | Valor |
+   |---|---|
+   | Build command | `npm install && npm run construir --workspace=@emergencias/web` |
+   | Deploy command | `npx wrangler deploy` |
+   | Variable | `API_ORIGEN` = la URL de la API del paso 3 |
+
+   El resto lo define [`wrangler.jsonc`](../wrangler.jsonc) en la raíz: el
+   directorio de assets (`apps/web/dist`), el binding `ASSETS` y el Worker de
+   `worker/index.js`, que reenvía `/v1` a la API y sirve la PWA para todo lo
+   demás.
+
+   Se construye desde la raíz y no desde `apps/web` porque el monorepo usa
+   workspaces de npm: `npm install` dentro del subdirectorio no resuelve las
+   dependencias.
+
+   No hace falta `VITE_API_URL`: eso es solo para el proxy de desarrollo.
 5. **Cron** en cron-job.org: `/salud` cada 10 min (mantener despierta) y
    `/v1/mantenimiento/refrescar-prioridades` cada minuto con la cabecera
    `x-secreto-mantenimiento`.

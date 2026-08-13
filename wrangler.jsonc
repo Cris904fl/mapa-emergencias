@@ -1,0 +1,28 @@
+{
+  // Despliegue de la PWA en Cloudflare Workers.
+  //
+  // Se construye desde la raíz del repositorio y no desde apps/web porque el
+  // monorepo usa workspaces de npm: `npm install` dentro del subdirectorio no
+  // resuelve las dependencias.
+  //
+  // En el panel de Cloudflare:
+  //   · Build command:  npm install && npm run construir --workspace=@emergencias/web
+  //   · Deploy command: npx wrangler deploy
+  //   · Variable:       API_ORIGEN = https://mapa-emergencias.onrender.com
+  "name": "mapa-emergencias",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-08-01",
+
+  "assets": {
+    "directory": "./apps/web/dist",
+    "binding": "ASSETS",
+    // El Worker atiende /v1 antes que los archivos estáticos. En la práctica
+    // ninguna ruta /v1 coincide con un archivo, pero dejarlo explícito evita
+    // que un cambio futuro en la salida del empaquetador se coma la API.
+    "run_worker_first": ["/v1/*"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
