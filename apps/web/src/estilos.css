@@ -78,6 +78,35 @@ code {
   z-index: 100;
 }
 
+/* Informativo, no alarmante: usa el azul de información y no el ámbar de aviso.
+   Estar una versión atrás no es una emergencia, y una barra de alarma en una
+   sala de crisis compite con las que sí lo son. */
+.aviso-version {
+  background: var(--info);
+  color: #fff;
+  padding: 0.55rem 1rem;
+  font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.aviso-version button {
+  background: rgb(255 255 255 / 15%);
+  border: 1px solid rgb(255 255 255 / 55%);
+  color: #fff;
+  font-weight: 600;
+  padding: 0.3rem 0.9rem;
+  min-height: 34px;
+}
+
+.aviso-version button:hover {
+  background: rgb(255 255 255 / 28%);
+  border-color: #fff;
+}
+
 .navegacion {
   display: flex;
   gap: 0.25rem;

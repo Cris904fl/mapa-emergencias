@@ -55,6 +55,11 @@ self.addEventListener('fetch', (evento) => {
   // rescate vieja como si fuera la actual es peor que no mostrar nada.
   if (url.pathname.startsWith('/v1/')) return;
 
+  // La comprobación de versión tampoco. Pregunta por el HTML para ver qué bundle
+  // declara el servidor (ver src/lib/version.ts); servida de caché compararía la
+  // versión vieja consigo misma y el aviso no aparecería nunca.
+  if (url.searchParams.has('comprobar-version')) return;
+
   // Navegaciones: red primero, caché como respaldo. Así la app abre sin
   // conexión con la última versión que se alcanzó a guardar.
   if (peticion.mode === 'navigate') {
