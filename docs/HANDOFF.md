@@ -1,6 +1,6 @@
 # HANDOFF — Mapa inteligente de afectaciones
 
-Estado del repositorio en el commit **`e6bc92f`** (rama `main`, sincronizada con
+Estado del repositorio en el commit **`4c8daaf`** (rama `main`, sincronizada con
 `origin/main`). Documento escrito inspeccionando el código y la base de datos en
 ejecución, no de memoria.
 
@@ -63,6 +63,7 @@ geografía de DIVIPOLA (la tabla `lugares` está vacía en producción). Sí hay
 | **Despliegue completo en producción** | Cloudflare Workers + Render + Supabase, verificado de punta a punta (§14) |
 | **Consulta de un caso por su código público** | verificada contra reportes reales |
 | **Notificaciones push a quien reportó** | recibida en un dispositivo real |
+| **Aviso de la línea oficial (123) en la pantalla ciudadana** | verificado en producción: las dos direcciones del condicional y 44 px de área táctil medidos |
 | **Medios en Supabase Storage** | subida y descarga con SHA-256 idéntico |
 | **3 388 recursos de emergencia de todo Colombia** | cargados desde OpenStreetMap |
 | Cron: despierta la API y refresca prioridades cada 10 min | observado refrescando solo |
@@ -190,6 +191,7 @@ locales).
 | `JWT_SECRETO` | — | **obligatoria**, mínimo 16 caracteres |
 | `ALMACEN_MEDIOS` | `./almacen` | directorio de fotos/audio |
 | `SECRETO_MANTENIMIENTO` | — | opcional, mínimo 16; sin él la ruta de mantenimiento responde 400 |
+| `SEMBRAR_ANFITRION` | — | permiso explícito para sembrar una base que no es local. Se escribe el **anfitrión exacto**, no `true`. Vacío es lo correcto |
 | `IA_PROVEEDOR` | `ninguno` | `ninguno` / `ollama` / `compatible` / `anthropic` |
 | `IA_MODELO` | `qwen2.5:latest` | |
 | `IA_MAX_TOKENS` | 600 | |
@@ -585,6 +587,9 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | Hora de llegada al sitio con su procedencia | ✅ 6 pruebas |
 | Alerta de asignaciones estancadas | ✅ 2 pruebas |
 | Filtro por severidad desde la leyenda del mapa | ✅ 2 pruebas |
+| **Aviso permanente de que esto no reemplaza al 123** | ✅ verificado en producción |
+| **Recordatorio del 123 al confirmar un reporte con vidas en riesgo** | ✅ los dos casos, en producción |
+| **La consulta por código no promete plazos** | ✅ verificado con un código real |
 
 ---
 
@@ -704,6 +709,37 @@ un reporte no es negociable**. En concreto:
 
 Hay pruebas que fijan las tres.
 
+### Ningún texto puede prometer una respuesta que el sistema no está dando
+
+Es la hermana de la regla anterior, y salió de auditar la pantalla ciudadana
+contra lo que la beta estaba haciendo de verdad. Decía tres cosas que no eran
+ciertas:
+
+- «una persona revisa antes de despachar», al pie del campo de descripción.
+  Nadie revisaba y no hay despacho.
+- «el sistema lee este texto para completar los datos», cuando producción corre
+  con `IA_PROVEEDOR=ninguno`.
+- «le avisamos **cuando** alguien tome su caso» — ese «cuando» presupone que va
+  a pasar. Ahora dice «si».
+
+Y faltaba lo más importante: **la línea 123 no aparecía en ninguna parte que un
+usuario normal pueda ver.** La única mención estaba en el `<noscript>` de
+`index.html`, o sea solo para quien tiene JavaScript apagado. Una aplicación que
+recibe «hay personas atrapadas» y no manda a la línea oficial está compitiendo
+con ella en lugar de complementarla, y el costo lo paga quien esperó en vez de
+llamar.
+
+Hoy hay un aviso permanente antes del formulario, y un recordatorio al confirmar
+cuando el propio reporte trae severidad crítica, rescate, atrapadas o heridas.
+El 123 va como enlace `tel:` con 44 px de área táctil: es la acción más
+importante de la pantalla mientras no haya nadie de guardia, así que no puede
+ser el objetivo más pequeño de la página.
+
+El aviso dice que no hay entidad de socorro de guardia porque, mientras eso sea
+verdad, ocultarlo es la promesa que más daño hace. **Cuando deje de ser verdad
+hay que cambiar ese texto** — es lo primero que se vuelve mentira si una
+institución adopta el sistema.
+
 ### El permiso de notificaciones se pide después de reportar, nunca al abrir
 
 Un navegador que pregunta «¿permitir notificaciones?» antes de que la persona
@@ -792,6 +828,18 @@ de los seis solo aparecen fuera de la máquina de desarrollo.
 - **Un medio de antes del cambio a Supabase Storage quedó huérfano**: la fila
   existe en `medios_reporte` y el archivo no. Es de cuando los medios iban al
   disco efímero de Render.
+- **Los roles operativos no son una frontera de permisos.** El único control es
+  `puedeOperar()`, que acepta `OPERADOR`, `RESPONDIENTE` y `ADMIN` por igual: los
+  tres pueden tomar casos, cerrarlos, cambiar estados desde el tablero y leer el
+  `contacto_reportante` de quien reportó. El rol sirve para la bitácora, no para
+  restringir. **Quien dé de alta a una persona está dando acceso operativo
+  completo a datos de gente real**, y conviene saberlo antes de crear la cuenta,
+  no después.
+- **No existe cambio de contraseña.** No hay endpoint ni pantalla: rotar una
+  clave exige que quien administra el despliegue vuelva a correr
+  `npm run clave`. Con una sola cuenta era teórico; con más de una persona es una
+  limitación real — nadie puede cambiar su propia clave, ni siquiera si se
+  filtró.
 
 ### Sin verificar (⚠️)
 
@@ -875,6 +923,41 @@ tiempo no lo habría arreglado. Eso llevó a la migración 008 —hora de llegad
 **con su procedencia**, `MARCADA` o `DECLARADA`— y a la pregunta al cerrar. El
 reloj de esa medición empieza ahí.
 
+### Después de escribir este documento, el mismo día
+
+Tres commits más, todos salidos de mirar el despliegue en uso y no de una lista
+de tareas:
+
+| Commit | Qué |
+|---|---|
+| `549289e` | la pantalla ciudadana deja de prometer lo que el sistema no da, y manda al 123 (§8) |
+| `39bce84` | el enlace al 123 pasa de 22 a 44 px de área táctil |
+| `4c8daaf` | `bd:sembrar` se niega a sembrar una base que no es local |
+
+**Lo que destapó el tercero.** El `.env` de la máquina de desarrollo apunta al
+pooler de Supabase —que es lo normal para administrar el despliegue desde
+aquí— y el único control de la siembra era `NODE_ENV === 'production'`, que ahí
+vale `development`. Es decir: `npm run bd:sembrar` escribía los datos de
+demostración **en producción**, incluidos los tres usuarios con clave `demo1234`
+y los dos barrios de Bogotá en `lugares`, que está vacía justamente para que no
+aparezcan como geografía real. Y `npm run bd:reiniciar` los encadena, así que el
+daño estaba a un comando cuyo nombre no lo sugiere. Ahora se comprueba el
+**destino** y no la intención, por la misma razón por la que el almacén de medios
+se elige por presencia de credenciales: una configuración que falla en producción
+y no en desarrollo es la peor de todas.
+
+**Cómo se verificó, que aquí importa.** No hay entorno intermedio entre esta
+máquina y la gente: el push despliega. Así que las dos cosas que se podían medir
+se midieron contra producción —el bundle servido, el área táctil real y las dos
+direcciones del condicional del recordatorio— y la única que exigía enviar un
+reporte se probó con DevTools en modo offline, que guarda en IndexedDB y no
+sincroniza. El tablero siguió en 7 abiertos: **ningún dato de prueba entró a la
+cola de personas reales.**
+
+**Y hay una cuenta operativa nueva** para alguien de fuera del proyecto, creada
+con `npm run clave` contra producción. Es la primera vez que el sistema tiene a
+alguien además de quien lo construyó. Ver §11: eso cambia la pregunta abierta.
+
 ## 11. SIGUIENTE PASO
 
 **Escuchar la beta. No construir nada grande todavía.**
@@ -889,6 +972,22 @@ leyendo código: se decide viendo qué hace la gente con él.
 propia beta ya dio evidencia en contra: los primeros cinco reportes reales
 entraron y **se quedaron en `RECIBIDO`** hasta que se movió uno a mano para
 probar las notificaciones. Nadie hizo triage. Nadie tomó un caso.
+
+**Al cierre del día son siete reportes, seis sin revisar, y la espera máxima va
+en 1006 minutos** —casi 17 horas— con cinco personas atrapadas y tres rescates
+pendientes declarados por quienes reportaron. La proporción no cambió al crecer
+la muestra: entran reportes y nadie los atiende.
+
+**Pero el experimento cambió de forma.** Ahora existe una cuenta operativa para
+alguien de fuera del proyecto (§10). Eso convierte una pregunta abstracta —«¿lo
+adoptará alguna institución?»— en una observación concreta y de plazo corto:
+**¿esa persona entra, mira la cola y toma un caso?** Si lo hace, la herramienta
+de triage funciona tal como está y lo que falta es distribución, no producto. Si
+no lo hace teniendo la cuenta y los casos delante, entonces el problema no era
+el acceso, y la mitad de ayuda mutua gana peso de verdad.
+
+Es la primera vez que la pregunta se puede responder mirando en vez de razonando.
+Vale la pena esperar esa respuesta antes de escribir nada.
 
 Hay dos caminos y son distintos:
 
@@ -907,9 +1006,17 @@ en modo consulta. Falta que quien reportó vea que alguien viene, y un rol de
 «respondiente» al que uno se **registra** —no anónimo— conservando la
 trazabilidad.
 
-**Recomendación: no decidirlo aún.** La beta lleva un día. Si en dos semanas
-nadie de una junta o de la Defensa Civil ha mirado el tablero, la respuesta ya
-estará dada.
+**Recomendación: no decidirlo aún**, y ahora hay una razón mejor que «lleva un
+día». Con una cuenta operativa entregada, el siguiente movimiento de la persona
+que la tiene vale más que cualquier razonamiento de escritorio. Dos semanas sin
+que nadie mire el tablero seguían siendo la señal; un caso tomado esta semana lo
+es más, y llega antes.
+
+Tres cosas se destraban solas en cuanto alguien tome el primer caso, y ninguna
+exige escribir código: se sabe si la herramienta sirve tal como está, le llega la
+**primera notificación push a un ciudadano real**, y empiezan a existir horas de
+llegada `MARCADA` — que es el instrumento que §10 declaró roto y sin el cual el
+umbral de «asignados sin llegada» no se puede calibrar.
 
 #### Un dato real, del mismo día
 
@@ -978,6 +1085,17 @@ npm run bd:migrar        # corredor idempotente, verifica hash de lo ya aplicado
 npm run bd:sembrar       # datos de prueba (idempotente, UUID fijos)
 ```
 
+**`bd:sembrar` se niega a correr si `DATABASE_URL` no apunta a esta máquina**, y
+aborta antes de conectarse. La semilla trae usuarios con clave conocida y
+geografía de ejemplo; con el `.env` apuntando al pooler —lo normal para
+administrar el despliegue— sembraba producción sin decir nada. La salida, si de
+verdad hace falta, es `SEMBRAR_ANFITRION=<el anfitrión exacto>`.
+
+**`bd:reiniciar` sigue mereciendo cuidado**: borra el volumen local y *después*
+migra y siembra contra `DATABASE_URL`. La siembra ya está cercada, pero la
+migración correría contra lo que diga el `.env` (inocuo: el corredor es
+idempotente y verifica hashes) y el volumen local se pierde igual.
+
 ### Desarrollo (tres terminales)
 
 ```bash
@@ -998,7 +1116,13 @@ npm run tipos            # tsc --noEmit en ambos paquetes
 ```bash
 # crear un operador, o cambiarle la clave si ya existe
 # (crea la organización si hace falta: todo operador necesita una)
-npm run clave --workspace=@emergencias/api -- correo@ejemplo.co clave-larga ADMIN "Nombre de la organización"
+#
+# EL ROL NO ES OPCIONAL AUNQUE LO PAREZCA: si se omite, la cuenta se crea como
+# ADMIN. Y los tres roles operativos pueden hacer lo mismo (§9), así que esto
+# entrega acceso completo a los datos de contacto de gente real.
+# Corre contra lo que diga DATABASE_URL: con el .env de administración, es
+# PRODUCCIÓN.
+npm run clave --workspace=@emergencias/api -- correo@ejemplo.co clave-larga RESPONDIENTE "Nombre de la organización"
 
 # comprobar que DATABASE_URL conecta y que PostGIS está
 # traduce los tres errores típicos, que no se parecen a su causa
@@ -1061,6 +1185,17 @@ llena con un toque.
 - **No matar ni relanzar procesos de otros proyectos** de Cristian
   (`aduanas_*`, `ocr_*`, `cls_postgres_dev`). Los puertos 5434 y 6381 se eligieron
   por eso.
+- **El `.env` de esta máquina apunta a producción.** `DATABASE_URL` es el pooler
+  de Supabase, no `localhost:5434`. Es deliberado —así se administra el
+  despliegue desde aquí— pero significa que **cualquier comando que escriba en la
+  base lo hace sobre datos de personas reales**: `bd:sembrar` (ya cercado),
+  `bd:migrar`, `npm run clave`, y una sesión de `dev:api` sirve producción en
+  `localhost:3010`. Antes de correr algo que escriba, comprobar a dónde apunta:
+  `npm run bd:probar-conexion`.
+- **No hay entorno intermedio entre esta máquina y la gente.** El push despliega:
+  Cloudflare reconstruye la PWA desde Git y Render redespliega la API. No hay CI
+  en el repositorio (`.github/workflows` está vacío); la configuración de
+  construcción vive en el panel de Cloudflare. Lo que se sube, se publica.
 
 ### Código
 
@@ -1239,25 +1374,37 @@ consulta por código, notificaciones push, atención en campo con ruta y
 obstáculos, tablero con filtros cruzables — con **76 pruebas** pasando, todo en
 `origin/main` y **reportes de personas reales entrando**.
 
-**Último cambio realizado.** Commit `e6bc92f`: carga de los 3 374 recursos de
-emergencia de Colombia desde OpenStreetMap, con la migración `011` que cambia la
-identidad de un recurso del nombre a su identificador de origen. Sin ese cambio,
-665 filas se habrían fundido en silencio.
+**Último cambio realizado.** Commit `4c8daaf`: `bd:sembrar` se niega a sembrar una
+base que no es local. Antes escribía los datos de demostración en producción
+—usuarios con clave `demo1234` incluidos— porque el único control era `NODE_ENV` y
+lo que decide el destino es `DATABASE_URL` (§10).
 
-**Próxima tarea exacta.** Ninguna urgente, y eso es deliberado: **la beta lleva
-un día y lo que falta se decide escuchándola**. Ver §11 para la pregunta de fondo
-—si esto es una herramienta de triage o una plataforma de ayuda mutua— y por qué
-conviene no responderla todavía.
+Los dos anteriores, del mismo día: `549289e`, la pantalla ciudadana deja de
+prometer una revisión humana que no existe y manda al **123**; `39bce84`, ese
+enlace pasa de 22 a 44 px de área táctil.
+
+**Próxima tarea exacta.** Ninguna de código, y eso es deliberado: **hay una cuenta
+operativa entregada a alguien de fuera del proyecto, y lo que hará esa persona
+responde la pregunta de §11 mejor que cualquier razonamiento.** Lo que hay que
+hacer es mirar el tablero: si `sin_atender` baja de 6, la herramienta de triage
+sirve tal como está y lo que falta es distribución.
 
 Lo accionable sin decidir nada de producto:
 
 1. **Sembrar `lugares`** con DIVIPOLA real. Es el hueco más visible: sin
-   geografía no hay resolución de zona y el panel de «Zonas» está vacío.
-2. **Etiquetado de fotos** — solo necesita `ollama pull gemma3:4b`.
+   geografía no hay resolución de zona y el panel de «Zonas» está vacío. Hace
+   falta decidir la fuente y el alcance antes de escribir nada.
+2. **Cambio de contraseña.** No existe (§9). Con más de una persona con cuenta,
+   nadie puede rotar su propia clave.
+3. **Etiquetado de fotos** — necesita `ollama pull gemma3:4b`. Ojo: producción
+   corre con `IA_PROVEEDOR=ninguno`, así que funcionaría en la máquina de
+   desarrollo y **no le llegaría a ningún usuario**. Es lo más visible de hacer,
+   no lo más útil.
 
 **Archivos relevantes.** `db/seeds/` y `apps/api/src/db/sembrar.ts` para lo
-primero; `apps/api/src/servicios/ia/imagen.ts` y `docs/ia-local.md` para lo
-segundo.
+primero; `apps/api/src/lib/auth.ts` y `apps/api/src/db/hash-clave.ts` para lo
+segundo; `apps/api/src/servicios/ia/imagen.ts` y `docs/ia-local.md` para lo
+tercero.
 
 **Bloqueos actuales.** Ninguno técnico.
 
@@ -1267,3 +1414,10 @@ prioridad afecta a gente que está pidiendo auxilio. Las reglas de §13 no son
 formalidades: la idempotencia por `id_cliente`, el guardado local antes de
 enviar, y que **recibir un reporte no dependa de nada opcional** son lo que
 sostiene eso.
+
+Y la que se sumó hoy: **ningún texto de la pantalla ciudadana puede prometer una
+respuesta que el sistema no está dando.** Hay siete reportes de personas reales
+esperando; seis llevan horas sin que nadie los mire. Mientras eso siga así, el
+aviso del 123 es la parte más importante de esa pantalla — y **cuando deje de ser
+así, ese texto es lo primero que hay que cambiar**, porque pasaría a ser falso al
+revés.
