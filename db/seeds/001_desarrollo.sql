@@ -46,8 +46,15 @@ ON CONFLICT (id) DO NOTHING;
 -- El trigger de reportes elige el polígono contenedor de MENOR área, así que
 -- un reporte dentro de un barrio queda asignado al barrio, y uno en zona
 -- rural del municipio queda asignado al municipio.
+-- El «Bogotá D.C.» de acá es un rectángulo de cuatro esquinas, no el municipio.
+-- Llevaba el código DIVIPOLA real `11001` y eso rompía dos cosas: afirmaba ser
+-- la entidad de verdad, y colisionaba con `lugares_codigo_uk` en cuanto se
+-- cargaba la geografía real con `scripts/cargar-lugares.mjs` — el `ON CONFLICT
+-- (id)` no atrapa un choque de `codigo`, así que la siembra fallaba entera.
+-- Sin código no colisiona con nada y sigue sirviendo para lo único que hace:
+-- dar un padre a los dos barrios de prueba.
 INSERT INTO lugares (id, padre_id, tipo, nombre, codigo, geom) VALUES
-  ('33333333-0000-4000-8000-000000000001', NULL, 'MUNICIPIO', 'Bogotá D.C.', '11001',
+  ('33333333-0000-4000-8000-000000000001', NULL, 'MUNICIPIO', 'Bogotá D.C. (prueba)', NULL,
    ST_GeomFromText('MULTIPOLYGON(((
       -74.15 4.55, -74.00 4.55, -74.00 4.75, -74.15 4.75, -74.15 4.55
     )))', 4326)::geography),

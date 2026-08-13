@@ -1,0 +1,389 @@
+#!/usr/bin/env node
+/**
+ * Carga la geografía administrativa de Colombia en `lugares`, desde el Marco
+ * Geoestadístico Nacional del DANE.
+ *
+ *   node --env-file-if-exists=.env scripts/cargar-lugares.mjs
+ *
+ * Por qué existe: con `lugares` vacía, el trigger `reportes_antes_insertar` no
+ * resuelve la zona de ningún reporte y el panel de «Zonas» del tablero se queda
+ * en blanco. No es un adorno: es la única vista que agrupa —«en este municipio
+ * hay once reportes y cuatro personas atrapadas»— y sin ella la sala de crisis
+ * solo ve una lista.
+ *
+ * ## Por qué se baja del servicio y no se versiona un archivo
+ *
+ * A diferencia de `cargar-recursos.mjs`, que lee un JSON del repositorio, acá se
+ * consulta el servicio del DANE en el momento. La geometría de 1.155 polígonos
+ * son unos 10 MB: versionarlos engordaría el repositorio para congelar un dato
+ * que el DANE actualiza, y que tiene una fuente oficial consultable. El código
+ * DIVIPOLA de cada entidad es su identidad estable, así que volver a correr esto
+ * el año que viene actualiza en vez de duplicar.
+ *
+ * ## La generalización no es una optimización, es una decisión
+ *
+ * El servicio entrega la geometría completa: **142 KB y 3.667 vértices para un
+ * solo municipio**, unos 155 MB para el país. Con `maxAllowableOffset` el
+ * servidor la simplifica antes de enviarla y baja a 9 KB por municipio, unos
+ * 10 MB en total.
+ *
+ * El valor por omisión es 0,0002 grados, unos 22 m. Esa es la única precisión
+ * que este dato necesita: sirve para decir en qué municipio cayó un punto, y un
+ * error solo es posible a menos de 22 m de una frontera municipal. Se puede
+ * pedir la geometría exacta con `--tolerancia=0`, pero son quince veces más
+ * bytes para una exactitud que ninguna decisión de este sistema usa.
+ *
+ * Consecuencia conocida: simplificar puede dejar rendijas entre municipios
+ * vecinos. Un reporte que caiga justo en una se queda sin zona —`lugar_id` en
+ * NULL—, que es exactamente lo que pasa hoy con la tabla vacía. Degrada al
+ * estado actual, no a algo peor.
+ *
+ * ## Por omisión solo municipios, y esto no es pereza
+ *
+ * El trigger resuelve la zona con `ORDER BY ST_Area(l.geom) ASC LIMIT 1`: el
+ * lugar más pequeño que contiene el punto. Con un solo nivel cargado eso es
+ * siempre el municipio y no hay ambigüedad.
+ *
+ * Cargar también los departamentos rompe eso en Bogotá, y **Bogotá es de donde
+ * viene la mayoría de los reportes**. En DIVIPOLA el Distrito Capital existe dos
+ * veces —departamento `11` y municipio `11001`— sobre el mismo territorio, con el
+ * área idéntica hasta el último decimal. El `ORDER BY` queda empatado y Postgres
+ * desempata como quiera, así que dos reportes de la misma cuadra pueden caer en
+ * filas distintas con el mismo nombre, y el panel de «Zonas» mostraría
+ * «BOGOTÁ, D.C.» dos veces con los reportes repartidos entre las dos.
+ *
+ * Con `--con-departamentos` se cargan los dos niveles y los municipios quedan
+ * colgados de su departamento. Sirve si algún día se quiere agrupar por
+ * departamento, pero exige antes una migración que haga al trigger preferir el
+ * `tipo` más específico en vez de fiarse del área. Mientras eso no exista, un
+ * nivel es correcto y dos son ambiguos.
+ */
+
+import pg from 'pg';
+
+const RAIZ = 'https://portalgis.dane.gov.co/mparcgis/rest/services/Hosted';
+
+/**
+ * Los dos niveles que se cargan, en orden: el padre antes que el hijo.
+ *
+ * `portalgis.dane.gov.co` y no `geoportal.dane.gov.co`: el segundo es el que
+ * aparece en la documentación y desde acá no responde —se queda colgado hasta el
+ * tiempo límite—, mientras este contesta en menos de un segundo. Si algún día
+ * deja de hacerlo, los mismos datos se pueden bajar a mano del geoportal.
+ */
+const NIVELES = [
+  {
+    tipo: 'DEPARTAMENTO',
+    servicio: 'Serv_Dpto_MGN_2025/FeatureServer/319',
+    campoCodigo: 'dpto_ccdgo',
+    campoNombre: 'dpto_cnmbre',
+    campoPadre: null,
+    esperados: 33,
+  },
+  {
+    tipo: 'MUNICIPIO',
+    servicio: 'Serv_Mpio_MGN_2025/FeatureServer/317',
+    campoCodigo: 'mpio_cdpmp',
+    campoNombre: 'mpio_cnmbre',
+    /** El código de departamento, para colgar el municipio de su padre. */
+    campoPadre: 'dpto_ccdgo',
+    esperados: 1122,
+  },
+];
+
+/** Cuántas entidades se piden por petición. Con la geometría generalizada, cien
+ *  son cerca de un mega por respuesta. */
+const POR_PAGINA = 100;
+
+const argumentos = process.argv.slice(2);
+const tolerancia = (() => {
+  const puesta = argumentos.find((a) => a.startsWith('--tolerancia='));
+  return puesta ? Number(puesta.split('=')[1]) : 0.0002;
+})();
+
+if (!Number.isFinite(tolerancia) || tolerancia < 0) {
+  console.error('--tolerancia debe ser un número de grados mayor o igual a 0.');
+  process.exit(1);
+}
+
+const conDepartamentos = argumentos.includes('--con-departamentos');
+
+/**
+ * Los niveles que se van a cargar de verdad.
+ *
+ * Sin `--con-departamentos` se carga solo el municipio: es el nivel que hace
+ * útil el panel de «Zonas» y el único que resuelve sin ambigüedad (ver la nota
+ * de la cabecera sobre Bogotá).
+ */
+const aCargar = conDepartamentos ? NIVELES : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
+
+if (conDepartamentos) {
+  console.warn(
+    'Aviso: con los dos niveles, un reporte de Bogotá puede resolver al\n' +
+      'departamento 11 o al municipio 11001 —misma área, empate en el trigger—\n' +
+      'y el panel de «Zonas» puede partir Bogotá en dos filas del mismo nombre.\n',
+  );
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL no está definida. ¿Falta el .env?');
+  process.exit(1);
+}
+
+/** Una página del servicio, en GeoJSON y ya en WGS84. */
+async function pedirPagina(nivel, desde) {
+  const parametros = new URLSearchParams({
+    where: '1=1',
+    outFields: [nivel.campoCodigo, nivel.campoNombre, nivel.campoPadre].filter(Boolean).join(','),
+    // Sin un orden explícito la paginación del servicio no es estable y se
+    // pueden repetir o perder entidades entre páginas.
+    orderByFields: nivel.campoCodigo,
+    resultOffset: String(desde),
+    resultRecordCount: String(POR_PAGINA),
+    outSR: '4326',
+    maxAllowableOffset: String(tolerancia),
+    f: 'geojson',
+  });
+
+  const respuesta = await fetch(`${RAIZ}/${nivel.servicio}/query?${parametros}`);
+  if (!respuesta.ok) {
+    throw new Error(`El servicio del DANE respondió HTTP ${respuesta.status} (${nivel.tipo})`);
+  }
+
+  const cuerpo = await respuesta.json();
+  // ArcGIS contesta 200 con un objeto de error adentro, así que el estado HTTP
+  // no basta para saber si salió bien.
+  if (cuerpo.error) {
+    throw new Error(`El servicio del DANE falló: ${cuerpo.error.message ?? 'sin detalle'}`);
+  }
+  return cuerpo.features ?? [];
+}
+
+async function descargar(nivel) {
+  const entidades = [];
+  for (let desde = 0; ; desde += POR_PAGINA) {
+    const pagina = await pedirPagina(nivel, desde);
+    entidades.push(...pagina);
+    process.stdout.write(`\r  ${nivel.tipo}: ${entidades.length}`);
+    if (pagina.length < POR_PAGINA) break;
+  }
+  process.stdout.write('\n');
+  return entidades;
+}
+
+// ---------------------------------------------------------------- descarga
+
+console.log(
+  `Bajando el MGN del DANE (tolerancia ${tolerancia} grados ≈ ${Math.round(tolerancia * 111_320)} m)…`,
+);
+
+const porNivel = new Map();
+try {
+  for (const nivel of aCargar) porNivel.set(nivel.tipo, await descargar(nivel));
+} catch (error) {
+  console.error('\nFALLO bajando los datos:', error instanceof Error ? error.message : error);
+  process.exit(1);
+}
+
+// Se valida todo antes de escribir nada, por lo mismo que en cargar-recursos:
+// media geografía cargada es peor que ninguna, porque unos reportes resolverían
+// su zona y otros no, y la diferencia no se vería en ninguna parte.
+const problemas = [];
+for (const nivel of aCargar) {
+  const entidades = porNivel.get(nivel.tipo);
+
+  if (entidades.length !== nivel.esperados) {
+    problemas.push(
+      `${nivel.tipo}: llegaron ${entidades.length} y se esperaban ${nivel.esperados}. ` +
+        'Si el DANE publicó una versión nueva del MGN, actualice «esperados» a conciencia.',
+    );
+  }
+
+  const codigos = new Set();
+  entidades.forEach((e, i) => {
+    const codigo = e.properties?.[nivel.campoCodigo];
+    const nombre = e.properties?.[nivel.campoNombre];
+    const donde = `${nivel.tipo} ${i + 1}${codigo ? ` (${codigo})` : ''}`;
+
+    if (!codigo) problemas.push(`${donde}: sin código DIVIPOLA`);
+    else if (codigos.has(codigo)) problemas.push(`${donde}: código repetido`);
+    else codigos.add(codigo);
+
+    if (!nombre?.trim()) problemas.push(`${donde}: sin nombre`);
+    if (!e.geometry) problemas.push(`${donde}: sin geometría`);
+    else if (e.geometry.type !== 'Polygon' && e.geometry.type !== 'MultiPolygon') {
+      problemas.push(`${donde}: geometría ${e.geometry.type}, se esperaba un polígono`);
+    }
+  });
+}
+
+// Todo municipio tiene que poder colgarse de un departamento cargado. Solo
+// aplica cuando se piden los dos niveles: sin departamentos no hay padre que
+// resolver y `padre_id` queda en NULL, que es válido.
+if (conDepartamentos) {
+  const codigosDepartamento = new Set(
+    porNivel.get('DEPARTAMENTO').map((e) => e.properties.dpto_ccdgo),
+  );
+  for (const municipio of porNivel.get('MUNICIPIO')) {
+    const padre = municipio.properties.dpto_ccdgo;
+    if (!codigosDepartamento.has(padre)) {
+      problemas.push(
+        `MUNICIPIO ${municipio.properties.mpio_cdpmp}: su departamento ${padre} no vino en la descarga`,
+      );
+    }
+  }
+}
+
+if (problemas.length > 0) {
+  console.error('\nNo se cargó nada. Problemas encontrados:\n');
+  problemas.slice(0, 20).forEach((p) => console.error('  ·', p));
+  if (problemas.length > 20) console.error(`  … y ${problemas.length - 20} más`);
+  process.exit(1);
+}
+
+// ----------------------------------------------------------------- escritura
+
+const cliente = new pg.Client({ connectionString: process.env.DATABASE_URL });
+
+// El `connect` va en su propio try: si falla, lo que se necesita es una línea que
+// diga qué pasó, no un volcado de pila de pg-protocol. `npm run bd:probar-conexion`
+// traduce los tres errores típicos con detalle.
+try {
+  await cliente.connect();
+} catch (error) {
+  console.error(
+    '\nNo se pudo conectar a la base:',
+    error instanceof Error ? error.message : error,
+  );
+  console.error('Los datos ya se bajaron y se validaron; no se escribió nada.');
+  console.error('Para diagnosticar la conexión: npm run bd:probar-conexion');
+  process.exit(1);
+}
+
+/** Cuántas entidades por INSERT. Cada una lleva su geometría, así que el lote
+ *  se mide en megas y no en filas. */
+const TAMANO_LOTE = 25;
+
+let creados = 0;
+let actualizados = 0;
+
+try {
+  /** Código DIVIPOLA → id en la base, para resolver `padre_id`. */
+  const idPorCodigo = new Map();
+
+  for (const nivel of aCargar) {
+    const entidades = porNivel.get(nivel.tipo);
+
+    for (let i = 0; i < entidades.length; i += TAMANO_LOTE) {
+      const lote = entidades.slice(i, i + TAMANO_LOTE);
+
+      const valores = [];
+      const parametros = [];
+      lote.forEach((e, j) => {
+        const b = j * 4;
+        /**
+         * La cadena de saneamiento de la geometría, de adentro hacia afuera:
+         *
+         *   · `ST_SetSRID` porque `ST_GeomFromGeoJSON` no asume 4326 y sin SRID
+         *     el casteo a geography falla.
+         *   · `ST_MakeValid` porque la simplificación del servidor puede dejar
+         *     anillos que se cruzan, y PostGIS los rechaza al indexar.
+         *   · `ST_CollectionExtract(…, 3)` porque `ST_MakeValid` puede devolver
+         *     una colección con líneas o puntos sueltos; solo interesan las
+         *     áreas.
+         *   · `ST_Multi` porque la columna es MultiPolygon y el servicio manda
+         *     Polygon cuando la entidad es de una sola pieza.
+         */
+        valores.push(
+          `($${b + 1}, $${b + 2}::tipo_lugar, $${b + 3}, ` +
+            `ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON($${b + 4}), 4326)), 3))::geography)`,
+        );
+        parametros.push(
+          e.properties[nivel.campoNombre].trim(),
+          nivel.tipo,
+          e.properties[nivel.campoCodigo],
+          JSON.stringify(e.geometry),
+        );
+      });
+
+      const { rows } = await cliente.query(
+        `INSERT INTO lugares (nombre, tipo, codigo, geom)
+         VALUES ${valores.join(', ')}
+         ON CONFLICT (codigo) WHERE codigo IS NOT NULL DO UPDATE
+            SET nombre = excluded.nombre,
+                tipo = excluded.tipo,
+                geom = excluded.geom
+         RETURNING id, codigo, (xmax = 0) AS es_nuevo`,
+        parametros,
+      );
+
+      for (const fila of rows) {
+        idPorCodigo.set(fila.codigo, fila.id);
+        fila.es_nuevo ? creados++ : actualizados++;
+      }
+      process.stdout.write(`\r  ${nivel.tipo}: ${Math.min(i + TAMANO_LOTE, entidades.length)}/${entidades.length}`);
+    }
+    process.stdout.write('\n');
+
+    // Los padres se cuelgan después de insertar el nivel, en una sola consulta:
+    // así el INSERT no necesita saber en qué orden llegaron las filas.
+    if (nivel.campoPadre && conDepartamentos) {
+      const codigos = [];
+      const padres = [];
+      for (const e of entidades) {
+        const idPadre = idPorCodigo.get(e.properties[nivel.campoPadre]);
+        if (idPadre) {
+          codigos.push(e.properties[nivel.campoCodigo]);
+          padres.push(idPadre);
+        }
+      }
+      await cliente.query(
+        `UPDATE lugares AS l
+            SET padre_id = d.padre::uuid
+           FROM unnest($1::text[], $2::text[]) AS d(codigo, padre)
+          WHERE l.codigo = d.codigo`,
+        [codigos, padres],
+      );
+      console.log(`  ${nivel.tipo}: ${codigos.length} colgados de su departamento`);
+    }
+  }
+
+  const { rows: resumen } = await cliente.query(
+    `SELECT tipo::text, count(*)::int AS n,
+            count(padre_id)::int AS con_padre,
+            round(avg(ST_NPoints(geom::geometry)))::int AS vertices_promedio
+       FROM lugares GROUP BY tipo ORDER BY tipo`,
+  );
+
+  console.log(`\nCreados: ${creados} · actualizados: ${actualizados}\n`);
+  console.log('Lugares en la base:');
+  resumen.forEach((f) =>
+    console.log(
+      `  · ${f.tipo.padEnd(13)} ${String(f.n).padStart(5)}   con padre: ${String(f.con_padre).padStart(5)}   vértices promedio: ${f.vertices_promedio}`,
+    ),
+  );
+
+  /**
+   * Los reportes que ya estaban en la base no tienen zona: el trigger solo
+   * resuelve al insertar y al mover el punto. Se dice, en vez de dejar creer que
+   * la carga los arregló sola.
+   */
+  const { rows: pendientes } = await cliente.query(
+    `SELECT count(*)::int AS n FROM reportes WHERE lugar_id IS NULL`,
+  );
+  if (pendientes[0].n > 0) {
+    console.log(
+      `\n${pendientes[0].n} reporte(s) ya existentes siguen sin zona: el trigger la resuelve` +
+        '\nal insertar, no hacia atrás. Para asignárselas:' +
+        '\n\n  UPDATE reportes r SET lugar_id = (' +
+        '\n    SELECT l.id FROM lugares l WHERE ST_Intersects(l.geom, r.geom)' +
+        '\n     ORDER BY ST_Area(l.geom) ASC LIMIT 1)' +
+        '\n  WHERE r.lugar_id IS NULL;',
+    );
+  }
+} catch (error) {
+  console.error('\nFALLO:', error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+} finally {
+  await cliente.end();
+}
