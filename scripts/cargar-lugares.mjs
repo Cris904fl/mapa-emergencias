@@ -130,6 +130,31 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+/**
+ * Cuántas veces se reintenta una página antes de rendirse, y cuánto se espera.
+ *
+ * La primera versión de este script no reintentaba, y la primera corrida real
+ * murió con `fetch failed` en el municipio 500 de 1.122. Bajar el país entero
+ * son doce peticiones de casi un mega contra un servicio público: que una se
+ * caiga no es la excepción, es lo esperable. Y rendirse a la mitad obliga a
+ * empezar de cero, que es la peor reacción posible a un error pasajero.
+ *
+ * Las esperas crecen —1 s, 2 s, 4 s, 8 s— porque si el servicio está saturado,
+ * insistir de inmediato es parte del problema.
+ */
+const REINTENTOS = 4;
+/** Una petición colgada es peor que una fallida: al menos la fallida se reintenta. */
+const LIMITE_MS = 90_000;
+
+const esperar = (ms) => new Promise((listo) => setTimeout(listo, ms));
+
+/** El motivo real detrás del `fetch failed` de Node, que por sí solo no dice nada. */
+function motivo(error) {
+  const causa = error?.cause;
+  const detalle = causa?.code ?? causa?.message;
+  return detalle ? `${error.message} (${detalle})` : String(error?.message ?? error);
+}
+
 /** Una página del servicio, en GeoJSON y ya en WGS84. */
 async function pedirPagina(nivel, desde) {
   const parametros = new URLSearchParams({
@@ -145,7 +170,9 @@ async function pedirPagina(nivel, desde) {
     f: 'geojson',
   });
 
-  const respuesta = await fetch(`${RAIZ}/${nivel.servicio}/query?${parametros}`);
+  const respuesta = await fetch(`${RAIZ}/${nivel.servicio}/query?${parametros}`, {
+    signal: AbortSignal.timeout(LIMITE_MS),
+  });
   if (!respuesta.ok) {
     throw new Error(`El servicio del DANE respondió HTTP ${respuesta.status} (${nivel.tipo})`);
   }
@@ -154,15 +181,39 @@ async function pedirPagina(nivel, desde) {
   // ArcGIS contesta 200 con un objeto de error adentro, así que el estado HTTP
   // no basta para saber si salió bien.
   if (cuerpo.error) {
-    throw new Error(`El servicio del DANE falló: ${cuerpo.error.message ?? 'sin detalle'}`);
+    // Se marca como definitivo: un error del propio servicio —una consulta mal
+    // formada, una capa que ya no existe— va a contestar lo mismo cuatro veces.
+    const fallo = new Error(`El servicio del DANE falló: ${cuerpo.error.message ?? 'sin detalle'}`);
+    fallo.definitivo = true;
+    throw fallo;
   }
   return cuerpo.features ?? [];
+}
+
+/** La misma página, insistiendo mientras el fallo pueda ser pasajero. */
+async function pedirPaginaConReintentos(nivel, desde) {
+  for (let intento = 1; ; intento++) {
+    try {
+      return await pedirPagina(nivel, desde);
+    } catch (error) {
+      if (error.definitivo || intento > REINTENTOS) throw error;
+      const espera = 1000 * 2 ** (intento - 1);
+      // El aviso va a stderr para no ensuciar la línea de progreso, y se dice en
+      // vez de callarse: una descarga que tardó el triple por reintentos es un
+      // dato sobre el servicio, no ruido.
+      console.error(
+        `\n  reintento ${intento}/${REINTENTOS} en ${espera / 1000}s ` +
+          `(${nivel.tipo} desde ${desde}): ${motivo(error)}`,
+      );
+      await esperar(espera);
+    }
+  }
 }
 
 async function descargar(nivel) {
   const entidades = [];
   for (let desde = 0; ; desde += POR_PAGINA) {
-    const pagina = await pedirPagina(nivel, desde);
+    const pagina = await pedirPaginaConReintentos(nivel, desde);
     entidades.push(...pagina);
     process.stdout.write(`\r  ${nivel.tipo}: ${entidades.length}`);
     if (pagina.length < POR_PAGINA) break;
@@ -181,7 +232,9 @@ const porNivel = new Map();
 try {
   for (const nivel of aCargar) porNivel.set(nivel.tipo, await descargar(nivel));
 } catch (error) {
-  console.error('\nFALLO bajando los datos:', error instanceof Error ? error.message : error);
+  console.error(`\nFALLO bajando los datos: ${motivo(error)}`);
+  console.error('No se escribió nada: la validación y la carga van después de bajar todo.');
+  console.error('Si fue un tropiezo de red, volver a correrlo empieza de nuevo sin dejar rastro.');
   process.exit(1);
 }
 
