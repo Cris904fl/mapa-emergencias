@@ -68,6 +68,15 @@ const esquema = z.object({
    */
   SECRETO_MANTENIMIENTO: z.string().min(16).optional(),
 
+  /**
+   * Permiso explícito para sembrar datos de prueba en una base que no es local.
+   *
+   * Se pone el **anfitrión exacto** que se quiere sembrar, no un `true`: una
+   * bandera booleana se copia una vez al `.env` y se queda puesta, y entonces la
+   * salvaguarda deja de proteger justo cuando hace falta. Ver `db/sembrar.ts`.
+   */
+  SEMBRAR_ANFITRION: z.string().optional(),
+
   // La IA es opcional a propósito. Con IA_PROVEEDOR en 'ninguno' la API acepta
   // reportes igual y simplemente no los enriquece: la extracción automática es
   // una comodidad, no un requisito para recibir un pedido de auxilio.
