@@ -9,7 +9,34 @@
  *   3. Nada de animaciones decorativas: en una sala de crisis distraen.
  */
 
+/* ---------------------------------------------------------------- paleta
+ *
+ * Dos temas, uno solo escrito a mano: el claro vive acá y el oscuro más abajo
+ * redefine únicamente las fichas que cambian. Ninguna regla del resto del
+ * archivo sabe qué tema está activo.
+ *
+ * La distinción que hace que esto funcione es **relleno contra texto**. Siete
+ * sitios usan un color semántico como fondo con texto blanco encima —la barra
+ * sin red, el aviso de versión, el botón principal, la marca de rescate—, y los
+ * mismos colores se usan como texto y como borde en otros. Son necesidades
+ * opuestas: para llevar texto blanco encima el color tiene que ser oscuro, y
+ * para leerse sobre un fondo oscuro tiene que ser claro. Un solo valor no puede
+ * las dos, y aclarar el compartido es exactamente cómo un modo oscuro acaba con
+ * texto blanco sobre naranja claro.
+ *
+ * Así que los `--relleno-*` son los mismos en los dos temas —siguen llevando
+ * texto blanco— y solo se aclaran las versiones de texto y borde.
+ *
+ * Lo que NO cambia con el tema, a propósito:
+ *   · Los colores del personal y del anillo de rescate en el mapa. Las teselas
+ *     de OpenStreetMap son claras siempre, así que un punto pensado para leerse
+ *     sobre ellas no debe seguir al tema de la interfaz.
+ *   · El verde de WhatsApp. Es una marca ajena; recolorearla la vuelve otra cosa.
+ */
+
 :root {
+  color-scheme: light;
+
   --tinta: #0f172a;
   --tinta-suave: #334155;
   --tenue: #64748b;
@@ -17,13 +44,64 @@
   --fondo: #f8fafc;
   --superficie: #ffffff;
 
+  /** Superficie hundida: el detalle de una fila, el panel de ruta. */
+  --fondo-hundido: #f8fafc;
+  /** Realce neutro: fichas de dato y hovers sin significado semántico. */
+  --realce: #e2e8f0;
+
+  /** Relleno fuerte con texto blanco: la barra de navegación, el puntaje, la
+      distancia, el mosaico activo. Era `--tinta` usada como fondo, que se
+      invierte mal: la tinta se aclara y la barra se volvería blanca con texto
+      gris claro encima. */
+  --relleno: #0f172a;
+  --barra-texto: #cbd5e1;
+  /** Texto e iconos sobre cualquier relleno de color. */
+  --sobre-color: #ffffff;
+
   --acento: #c2410c;
   --acento-claro: #fff7ed;
+  --acento-fuerte: #9a3412;
 
   --alarma: #b91c1c;
   --aviso: #b45309;
   --bien: #15803d;
   --info: #0369a1;
+
+  /* Rellenos: iguales en los dos temas, porque llevan texto blanco encima. */
+  --relleno-acento: #c2410c;
+  --relleno-alarma: #b91c1c;
+  --relleno-aviso: #b45309;
+  --relleno-info: #0369a1;
+
+  /* Fondos pálidos de estado, con su borde. */
+  --fondo-alarma: #fef2f2;
+  --linea-alarma: #fecaca;
+  --fondo-aviso: #fffbeb;
+  --linea-aviso: #fde68a;
+  --fondo-bien: #f0fdf4;
+  --linea-bien: #bbf7d0;
+
+  /* La marca de «IA sin revisar», que es su propia categoría. */
+  --ia-fondo: #ede9fe;
+  --ia-texto: #5b21b6;
+  --ia-linea: #c4b5fd;
+
+  /* Superpuestos sutiles. En claro son negro translúcido; en oscuro tienen que
+     ser blanco translúcido o desaparecen. */
+  --tenue-superpuesto: rgb(15 23 42 / 8%);
+  --tenue-hover: rgb(15 23 42 / 7%);
+  --tenue-separador: rgb(15 23 42 / 10%);
+  /** Velo de los paneles que flotan sobre el mapa. */
+  --velo-panel: rgb(255 255 255 / 94%);
+
+  /* Del mapa: no siguen al tema (ver la nota de arriba). */
+  --personal: #0d9488;
+  --personal-nucleo: #ffffff;
+  --marcador-borde: #111827;
+
+  /* Marca ajena: no se recolorea. */
+  --whatsapp: #25d366;
+  --whatsapp-texto: #06251a;
 
   --sev-critica: #b91c1c;
   --sev-alta: #ea580c;
@@ -33,6 +111,75 @@
 
   --radio: 10px;
   --sombra: 0 1px 2px rgb(15 23 42 / 8%), 0 4px 12px rgb(15 23 42 / 4%);
+}
+
+/* ------------------------------------------------------------ tema oscuro
+ *
+ * Sigue al sistema operativo y no hay interruptor. En un celular el tema ya
+ * cambia solo al anochecer, que es justo cuando importa: la pantalla al máximo
+ * en una zona sin luz arruina la visión nocturna de quien va a atender, y
+ * gasta batería que en una emergencia no se recupera. Un interruptor propio
+ * añadiría un control a las tres pantallas y un estado que guardar, para
+ * decidir algo que el teléfono ya sabe.
+ *
+ * `color-scheme` no es decorativo: sin él los campos de texto, los desplegables
+ * y las barras de desplazamiento los sigue pintando el navegador en claro, y
+ * quedan parches blancos en medio de todo lo demás.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --tinta: #e8eef7;
+    --tinta-suave: #b9c6d8;
+    --tenue: #8fa0b8;
+    --linea: #2b3648;
+    --fondo: #0d1320;
+    --superficie: #161e2e;
+
+    --fondo-hundido: #111827;
+    --realce: #2b3648;
+
+    /* Más claro que el fondo, no más oscuro: en claro este relleno resalta por
+       ser oscuro sobre blanco, así que en oscuro tiene que resaltar por ser
+       claro sobre negro. Mantiene el texto blanco. */
+    --relleno: #33405a;
+
+    --acento: #fb923c;
+    --acento-claro: #2c1a0f;
+    --acento-fuerte: #fdba74;
+
+    --alarma: #f87171;
+    --aviso: #fbbf24;
+    --bien: #4ade80;
+    --info: #60a5fa;
+
+    --fondo-alarma: #2a1416;
+    --linea-alarma: #5b1d1d;
+    --fondo-aviso: #2a2110;
+    --linea-aviso: #5c4410;
+    --fondo-bien: #0f2419;
+    --linea-bien: #1d5236;
+
+    --ia-fondo: #241a3d;
+    --ia-texto: #c4b5fd;
+    --ia-linea: #4c3a86;
+
+    --tenue-superpuesto: rgb(255 255 255 / 10%);
+    --tenue-hover: rgb(255 255 255 / 9%);
+    --tenue-separador: rgb(255 255 255 / 14%);
+    --velo-panel: rgb(13 19 32 / 94%);
+
+    --sev-critica: #f87171;
+    --sev-alta: #fb923c;
+    --sev-media: #facc15;
+    --sev-baja: #a3e635;
+    --sev-desconocida: #8fa0b8;
+
+    /* Una sombra negra sobre un fondo casi negro no se ve: lo que separa una
+       tarjeta del fondo en este tema es su borde, así que la sombra solo apoya. */
+    --sombra: 0 1px 2px rgb(0 0 0 / 45%), 0 4px 12px rgb(0 0 0 / 30%);
+  }
 }
 
 * {
@@ -67,8 +214,8 @@ code {
 }
 
 .aviso-sin-red {
-  background: var(--aviso);
-  color: #fff;
+  background: var(--relleno-aviso);
+  color: var(--sobre-color);
   padding: 0.7rem 1rem;
   font-size: 0.95rem;
   font-weight: 500;
@@ -82,8 +229,8 @@ code {
    Estar una versión atrás no es una emergencia, y una barra de alarma en una
    sala de crisis compite con las que sí lo son. */
 .aviso-version {
-  background: var(--info);
-  color: #fff;
+  background: var(--relleno-info);
+  color: var(--sobre-color);
   padding: 0.55rem 1rem;
   font-size: 0.92rem;
   display: flex;
@@ -96,7 +243,7 @@ code {
 .aviso-version button {
   background: rgb(255 255 255 / 15%);
   border: 1px solid rgb(255 255 255 / 55%);
-  color: #fff;
+  color: var(--sobre-color);
   font-weight: 600;
   padding: 0.3rem 0.9rem;
   min-height: 34px;
@@ -104,14 +251,14 @@ code {
 
 .aviso-version button:hover {
   background: rgb(255 255 255 / 28%);
-  border-color: #fff;
+  border-color: var(--sobre-color);
 }
 
 .navegacion {
   display: flex;
   gap: 0.25rem;
   padding: 0.5rem 1rem 0;
-  background: var(--tinta);
+  background: var(--relleno);
 }
 
 .navegacion button {
@@ -119,7 +266,7 @@ code {
   padding: 0.7rem 1.4rem;
   border: none;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--barra-texto);
   font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
@@ -128,7 +275,7 @@ code {
 
 .navegacion button:hover {
   background: rgb(255 255 255 / 8%);
-  color: #fff;
+  color: var(--sobre-color);
 }
 
 .navegacion button.activa {
@@ -222,8 +369,8 @@ button.enlace {
 
 .insignia {
   display: inline-block;
-  background: var(--aviso);
-  color: #fff;
+  background: var(--relleno-aviso);
+  color: var(--sobre-color);
   border-radius: 999px;
   padding: 0.1rem 0.6rem;
   font-size: 0.78rem;
@@ -247,17 +394,17 @@ button.enlace {
 }
 
 .confirmacion.guardada {
-  background: #fffbeb;
+  background: var(--fondo-aviso);
   border-color: var(--aviso);
 }
 
 .confirmacion.enviada {
-  background: #f0fdf4;
+  background: var(--fondo-bien);
   border-color: var(--bien);
 }
 
 .confirmacion code {
-  background: rgb(15 23 42 / 8%);
+  background: var(--tenue-superpuesto);
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   font-weight: 700;
@@ -331,7 +478,7 @@ button.enlace {
 }
 
 .ubicacion-ok {
-  background: #f0fdf4;
+  background: var(--fondo-bien);
   border-radius: 8px;
   padding: 0.7rem;
   margin: 0 0 0.5rem;
@@ -450,15 +597,15 @@ button.enlace {
   padding: 1rem;
   font-size: 1.1rem;
   font-weight: 600;
-  background: var(--acento);
-  color: #fff;
+  background: var(--relleno-acento);
+  color: var(--sobre-color);
   border: none;
   border-radius: var(--radio);
   min-height: 54px;
 }
 
 .boton-principal:hover:not(:disabled) {
-  background: #9a3412;
+  background: var(--acento-fuerte);
 }
 
 /* ------------------------------------------------------- bandeja local */
@@ -597,13 +744,13 @@ button.cifra {
 }
 
 .cifra.pulsable.activa {
-  background: var(--tinta);
-  border-color: var(--tinta);
+  background: var(--relleno);
+  border-color: var(--relleno);
 }
 
 .cifra.pulsable.activa .valor,
 .cifra.pulsable.activa .etiqueta {
-  color: #fff;
+  color: var(--sobre-color);
 }
 
 .barra-filtro {
@@ -656,7 +803,7 @@ button.cifra {
   position: absolute;
   bottom: 0.6rem;
   right: 0.6rem;
-  background: rgb(255 255 255 / 94%);
+  background: var(--velo-panel);
   border: 1px solid var(--linea);
   border-radius: 8px;
   padding: 0.5rem 0.7rem;
@@ -703,7 +850,7 @@ button.entrada-leyenda {
 }
 
 button.entrada-leyenda:hover {
-  background: rgb(15 23 42 / 7%);
+  background: var(--tenue-hover);
 }
 
 button.entrada-leyenda.activa {
@@ -719,15 +866,15 @@ button.entrada-leyenda:focus-visible {
 
 .entrada-leyenda i.anillo-rescate {
   background: transparent;
-  border: 2px solid #111827;
+  border: 2px solid var(--marcador-borde);
 }
 
 /* Repite el anillo con núcleo blanco que el mapa dibuja para el personal: la
    leyenda solo sirve si la muestra es igual al punto que hay que reconocer. */
 .entrada-leyenda i.punto-personal {
-  background: #0d9488;
-  box-shadow: inset 0 0 0 2.5px #ffffff;
-  border: 1px solid #0d9488;
+  background: var(--personal);
+  box-shadow: inset 0 0 0 2.5px var(--personal-nucleo);
+  border: 1px solid var(--personal);
 }
 
 .entrada-leyenda i.punto-personal.desvanecido {
@@ -765,7 +912,7 @@ button.entrada-leyenda:focus-visible {
   flex-direction: column;
   gap: 0.1rem;
   border: 1px solid var(--linea);
-  border-left: 3px solid #0d9488;
+  border-left: 3px solid var(--personal);
   border-radius: 8px;
   padding: 0.35rem 0.6rem;
   background: var(--superficie);
@@ -895,15 +1042,15 @@ button.entrada-leyenda:focus-visible {
   font-size: 1.2rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  background: var(--tinta);
-  color: #fff;
+  background: var(--relleno);
+  color: var(--sobre-color);
   border: none;
   border-radius: 8px;
   padding: 0.4rem;
 }
 
 .puntaje:hover {
-  background: var(--acento);
+  background: var(--relleno-acento);
 }
 
 .datos-fila {
@@ -938,16 +1085,16 @@ button.entrada-leyenda:focus-visible {
 }
 
 .marca-rescate {
-  background: var(--alarma);
-  color: #fff;
+  background: var(--relleno-alarma);
+  color: var(--sobre-color);
 }
 
 /* La marca de IA sin revisar es deliberadamente visible: quien mira la cola
    debe saber de un golpe si un número lo puso una persona o un modelo. */
 .marca-ia {
-  background: #ede9fe;
-  color: #5b21b6;
-  border: 1px solid #c4b5fd;
+  background: var(--ia-fondo);
+  color: var(--ia-texto);
+  border: 1px solid var(--ia-linea);
 }
 
 .meta-fila {
@@ -978,7 +1125,7 @@ button.entrada-leyenda:focus-visible {
 .detalle-fila {
   border-top: 1px solid var(--linea);
   padding: 0.85rem;
-  background: #f8fafc;
+  background: var(--fondo-hundido);
 }
 
 .tabla-componentes {
@@ -1157,14 +1304,14 @@ button.entrada-leyenda:focus-visible {
 }
 
 .boton-ver:hover {
-  background: #e2e8f0;
+  background: var(--realce);
 }
 
 .error-acceso {
   margin: 0 0 1rem;
   padding: 0.65rem 0.8rem;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--fondo-alarma);
+  border: 1px solid var(--linea-alarma);
   border-radius: 9px;
   color: var(--alarma);
   font-size: 0.9rem;
@@ -1234,7 +1381,7 @@ button.entrada-leyenda:focus-visible {
 }
 
 .cuentas-demo code {
-  background: rgb(15 23 42 / 8%);
+  background: var(--tenue-superpuesto);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
   font-weight: 600;
@@ -1253,13 +1400,13 @@ button.entrada-leyenda:focus-visible {
 }
 
 .barra-ubicacion.ok {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: var(--fondo-bien);
+  border-color: var(--linea-bien);
 }
 
 .barra-ubicacion.pendiente {
-  background: #fffbeb;
-  border-color: #fde68a;
+  background: var(--fondo-aviso);
+  border-color: var(--linea-aviso);
 }
 
 .barra-ubicacion small {
@@ -1267,8 +1414,8 @@ button.entrada-leyenda:focus-visible {
 }
 
 .aviso-accion {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--fondo-alarma);
+  border: 1px solid var(--linea-alarma);
   border-radius: var(--radio);
   padding: 0.7rem 0.9rem;
   margin-bottom: 1rem;
@@ -1314,9 +1461,9 @@ button.entrada-leyenda:focus-visible {
 }
 
 .grupo-orden button.activa {
-  background: var(--tinta);
-  color: #fff;
-  border-color: var(--tinta);
+  background: var(--relleno);
+  color: var(--sobre-color);
+  border-color: var(--relleno);
 }
 
 .casilla-compacta {
@@ -1346,7 +1493,7 @@ button.entrada-leyenda:focus-visible {
 
 /* Los casos propios se distinguen del resto de un vistazo. */
 .tarjeta-caso.mio {
-  background: #f8fafc;
+  background: var(--fondo-hundido);
   border-color: var(--info);
 }
 
@@ -1362,8 +1509,8 @@ button.entrada-leyenda:focus-visible {
   font-size: 1.15rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  background: var(--tinta);
-  color: #fff;
+  background: var(--relleno);
+  color: var(--sobre-color);
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
   min-width: 72px;
@@ -1391,7 +1538,7 @@ button.entrada-leyenda:focus-visible {
 }
 
 .marca-prioridad {
-  background: #e2e8f0;
+  background: var(--realce);
   color: var(--tinta);
   border-radius: 4px;
   padding: 0.1rem 0.4rem;
@@ -1456,14 +1603,14 @@ button.entrada-leyenda:focus-visible {
 }
 
 .acciones-caso button.principal {
-  background: var(--acento);
-  color: #fff;
+  background: var(--relleno-acento);
+  color: var(--sobre-color);
   border-color: var(--acento);
   font-weight: 600;
 }
 
 .acciones-caso button.principal:hover:not(:disabled) {
-  background: #9a3412;
+  background: var(--acento-fuerte);
 }
 
 .acciones-caso button.enlace {
@@ -1475,7 +1622,7 @@ button.entrada-leyenda:focus-visible {
 .panel-ruta {
   margin-top: 0.85rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: var(--fondo-hundido);
   border: 1px solid var(--linea);
   border-radius: 8px;
 }
@@ -1496,8 +1643,8 @@ button.entrada-leyenda:focus-visible {
 .obstaculos {
   margin-top: 0.6rem;
   padding: 0.7rem;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--fondo-alarma);
+  border: 1px solid var(--linea-alarma);
   border-radius: 8px;
 }
 
@@ -1517,7 +1664,7 @@ button.entrada-leyenda:focus-visible {
 
 .obstaculos li {
   padding: 0.35rem 0;
-  border-bottom: 1px solid #fecaca;
+  border-bottom: 1px solid var(--linea-alarma);
 }
 
 .obstaculos li:last-child {
@@ -1799,7 +1946,7 @@ button.entrada-leyenda:focus-visible {
  */
 
 .aviso-linea-oficial {
-  background: #fef2f2;
+  background: var(--fondo-alarma);
   border: 1px solid var(--alarma);
   border-left-width: 4px;
   border-radius: var(--radio);
@@ -1819,7 +1966,7 @@ button.entrada-leyenda:focus-visible {
 .recordar-linea-oficial {
   margin: 0.8rem 0 0;
   padding-top: 0.7rem;
-  border-top: 1px solid rgb(15 23 42 / 10%);
+  border-top: 1px solid var(--tenue-separador);
   font-size: 0.95rem;
 }
 
@@ -1851,7 +1998,7 @@ button.entrada-leyenda:focus-visible {
 }
 
 .aviso-precision {
-  background: #fffbeb;
+  background: var(--fondo-aviso);
   border: 1px solid var(--aviso);
   border-left-width: 4px;
   border-radius: var(--radio);
@@ -1886,8 +2033,8 @@ button.entrada-leyenda:focus-visible {
 
 .boton-compartir {
   display: inline-block;
-  background: #25d366;
-  color: #06251a;
+  background: var(--whatsapp);
+  color: var(--whatsapp-texto);
   font-weight: 700;
   font-size: 0.9rem;
   text-decoration: none;
@@ -1924,7 +2071,7 @@ button.entrada-leyenda:focus-visible {
 .ofrecer-avisos {
   margin-top: 0.8rem;
   padding-top: 0.8rem;
-  border-top: 1px solid rgb(15 23 42 / 10%);
+  border-top: 1px solid var(--tenue-separador);
 }
 
 .ofrecer-avisos p {
