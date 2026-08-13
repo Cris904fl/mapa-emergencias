@@ -9,7 +9,10 @@
   //   · Build command:  npm install && npm run construir --workspace=@emergencias/web
   //   · Deploy command: npx wrangler deploy
   //   · Variable:       API_ORIGEN = https://mapa-emergencias.onrender.com
-  "name": "mapa-emergencias",
+  // El nombre es la primera etiqueta de la URL pública:
+  // <name>.<subdominio-de-cuenta>.workers.dev. Corto a propósito — esta
+  // dirección se va a dictar por teléfono y por radio.
+  "name": "mapa",
   "main": "worker/index.js",
   "compatibility_date": "2026-08-01",
 
