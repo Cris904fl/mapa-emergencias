@@ -91,9 +91,15 @@ const NIVELES = [
   },
 ];
 
-/** Cuántas entidades se piden por petición. Con la geometría generalizada, cien
- *  son cerca de un mega por respuesta. */
-const POR_PAGINA = 100;
+/**
+ * Cuántas entidades se piden por petición.
+ *
+ * Eran cien —cerca de un mega por respuesta— y el servicio del DANE cortó la
+ * conexión a mitad de descarga dos veces de tres. Cincuenta son medio mega:
+ * más peticiones, cada una menos tiempo expuesta a que el socket se caiga, y
+ * una que falle cuesta la mitad reintentarla.
+ */
+const POR_PAGINA = 50;
 
 const argumentos = process.argv.slice(2);
 const tolerancia = (() => {
@@ -109,13 +115,36 @@ if (!Number.isFinite(tolerancia) || tolerancia < 0) {
 const conDepartamentos = argumentos.includes('--con-departamentos');
 
 /**
+ * Asignarles zona a los reportes que ya estaban en la base.
+ *
+ * El trigger resuelve la zona al insertar y al mover el punto, no hacia atrás:
+ * los reportes que entraron cuando `lugares` estaba vacía se quedan con
+ * `lugar_id` en NULL para siempre, y el panel de «Zonas» los ignora.
+ *
+ * Va detrás de una bandera y no por omisión porque escribe sobre reportes de
+ * personas reales. Es una escritura inocua —solo rellena lo que está en NULL, y
+ * `lugar_id` no alimenta el índice de prioridad ni ninguna decisión— pero
+ * «inocuo» lo decide quien administra el despliegue, no este script.
+ */
+const soloZonas = argumentos.includes('--solo-zonas');
+const asignarZonas = soloZonas || argumentos.includes('--asignar-zonas');
+
+/**
  * Los niveles que se van a cargar de verdad.
  *
  * Sin `--con-departamentos` se carga solo el municipio: es el nivel que hace
  * útil el panel de «Zonas» y el único que resuelve sin ambigüedad (ver la nota
  * de la cabecera sobre Bogotá).
  */
-const aCargar = conDepartamentos ? NIVELES : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
+const aCargar = soloZonas
+  ? // `--solo-zonas` no baja ni escribe geografía: solo les asigna zona a los
+    // reportes que ya están. Son dos operaciones independientes y juntarlas
+    // obligaba a bajar 10 MB para hacer un UPDATE — y a exponerse a que la
+    // descarga falle en algo que no la necesita.
+    []
+  : conDepartamentos
+    ? NIVELES
+    : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
 
 if (conDepartamentos) {
   console.warn(
@@ -143,8 +172,16 @@ if (!process.env.DATABASE_URL) {
  * insistir de inmediato es parte del problema.
  */
 const REINTENTOS = 4;
-/** Una petición colgada es peor que una fallida: al menos la fallida se reintenta. */
-const LIMITE_MS = 90_000;
+/**
+ * Tiempo límite por petición. Generoso a propósito.
+ *
+ * Una petición colgada es peor que una fallida —la fallida se reintenta— pero
+ * abortar mientras se lee el cuerpo es lo que dispara la aserción interna de
+ * undici que mata el proceso. Con páginas de cincuenta entidades, dos minutos
+ * son de sobra para cualquier respuesta legítima, así que este límite solo salta
+ * cuando de verdad no hay nada del otro lado.
+ */
+const LIMITE_MS = 120_000;
 
 const esperar = (ms) => new Promise((listo) => setTimeout(listo, ms));
 
@@ -224,9 +261,42 @@ async function descargar(nivel) {
 
 // ---------------------------------------------------------------- descarga
 
-console.log(
-  `Bajando el MGN del DANE (tolerancia ${tolerancia} grados ≈ ${Math.round(tolerancia * 111_320)} m)…`,
-);
+/**
+ * La aserción interna de undici, que no se puede atrapar con try.
+ *
+ * Cuando el servicio corta el socket TLS a mitad de una respuesta —o cuando el
+ * `AbortSignal` la interrumpe mientras se lee el cuerpo—, el `fetch` de Node no
+ * lanza un error normal: falla un `assert` dentro de undici, de forma asíncrona,
+ * fuera de cualquier `try`. El proceso se muere con un volcado de pila que habla
+ * de `this.paused` y no dice nada de lo que estaba pasando.
+ *
+ * No se puede seguir después de eso —el estado interno de la librería quedó
+ * roto— pero sí se puede explicar y decir que no se escribió nada, que es la
+ * única pregunta que importa cuando algo se cae a la mitad.
+ */
+process.on('uncaughtException', (error) => {
+  // Se distingue la aserción de undici de un error de programación. Tratar
+  // cualquier excepción como «fallo de red» sería mentir en el caso que más
+  // importa: cuando el que está roto es este script.
+  const esCorteDeRed =
+    error?.code === 'ERR_ASSERTION' && /paused|undici/i.test(String(error?.stack ?? error));
+
+  if (!esCorteDeRed) {
+    console.error('\nFALLO no previsto:', error);
+    process.exit(1);
+  }
+
+  console.error(`\nLa descarga se cortó por un fallo interno de red: ${motivo(error)}`);
+  console.error('No se escribió nada. Volver a correrlo empieza de cero sin dejar rastro.');
+  console.error('Si se repite, ya están cargados los municipios: use --solo-zonas.');
+  process.exit(1);
+});
+
+if (!soloZonas) {
+  console.log(
+    `Bajando el MGN del DANE (tolerancia ${tolerancia} grados ≈ ${Math.round(tolerancia * 111_320)} m)…`,
+  );
+}
 
 const porNivel = new Map();
 try {
@@ -424,15 +494,59 @@ try {
   const { rows: pendientes } = await cliente.query(
     `SELECT count(*)::int AS n FROM reportes WHERE lugar_id IS NULL`,
   );
-  if (pendientes[0].n > 0) {
+
+  if (pendientes[0].n === 0) {
+    console.log('\nTodos los reportes tienen zona.');
+  } else if (!asignarZonas) {
     console.log(
       `\n${pendientes[0].n} reporte(s) ya existentes siguen sin zona: el trigger la resuelve` +
-        '\nal insertar, no hacia atrás. Para asignárselas:' +
-        '\n\n  UPDATE reportes r SET lugar_id = (' +
-        '\n    SELECT l.id FROM lugares l WHERE ST_Intersects(l.geom, r.geom)' +
-        '\n     ORDER BY ST_Area(l.geom) ASC LIMIT 1)' +
-        '\n  WHERE r.lugar_id IS NULL;',
+        '\nal insertar, no hacia atrás. Para asignárselas, con esta misma orden:' +
+        '\n\n  node --env-file-if-exists=.env scripts/cargar-lugares.mjs --asignar-zonas',
     );
+  } else {
+    /**
+     * La misma consulta del trigger, palabra por palabra.
+     *
+     * Que sea idéntica es el punto: si acá se escribiera otra cosa, un reporte
+     * viejo y uno nuevo del mismo sitio podrían acabar en zonas distintas y
+     * nadie lo notaría. Si el trigger cambia, esto tiene que cambiar con él.
+     */
+    const { rowCount } = await cliente.query(
+      `UPDATE reportes r
+          SET lugar_id = (
+                SELECT l.id
+                  FROM lugares l
+                 WHERE ST_Intersects(l.geom, r.geom)
+                 ORDER BY ST_Area(l.geom) ASC
+                 LIMIT 1)
+        WHERE r.lugar_id IS NULL
+          AND EXISTS (SELECT 1 FROM lugares l WHERE ST_Intersects(l.geom, r.geom))`,
+      [],
+    );
+
+    const { rows: restantes } = await cliente.query(
+      `SELECT count(*)::int AS n FROM reportes WHERE lugar_id IS NULL`,
+    );
+
+    console.log(`\nZonas asignadas a ${rowCount} reporte(s) que no la tenían.`);
+    if (restantes[0].n > 0) {
+      // Un reporte fuera de todo polígono: coordenadas en el mar, o en una
+      // rendija que dejó la generalización. Se dice cuántos, porque cero y tres
+      // significan cosas distintas.
+      console.log(
+        `${restantes[0].n} siguen sin zona: su punto no cae dentro de ningún municipio cargado.`,
+      );
+    }
+
+    const { rows: porZona } = await cliente.query(
+      `SELECT l.nombre, count(*)::int AS n
+         FROM reportes r JOIN lugares l ON l.id = r.lugar_id
+        GROUP BY l.nombre ORDER BY n DESC, l.nombre LIMIT 10`,
+    );
+    if (porZona.length > 0) {
+      console.log('\nReportes por zona:');
+      porZona.forEach((f) => console.log(`  · ${f.nombre.padEnd(28)} ${f.n}`));
+    }
   }
 } catch (error) {
   console.error('\nFALLO:', error instanceof Error ? error.message : error);
