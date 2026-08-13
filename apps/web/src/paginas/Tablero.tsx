@@ -250,8 +250,8 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
         <section className="panel">
           <h2>Cola de atención</h2>
           <p className="nota-panel">
-            Ordenada por el índice de prioridad. Toque un puntaje para ver de qué está
-            compuesto.
+            Ordenada por el índice de prioridad. Toque «desglose y fotos» —o el
+            puntaje— para ver de qué está compuesto y qué envió quien reportó.
           </p>
           <ol className="cola">
             {cola.map((reporte) => (
@@ -590,7 +590,7 @@ function FilaCola({
             onAlternar();
           }}
           aria-expanded={expandido}
-          title="Ver de qué está compuesto este puntaje"
+          title="Ver el desglose del puntaje y las fotos del reporte"
         >
           {reporte.score === null ? '—' : reporte.score.toFixed(1)}
         </button>
@@ -629,6 +629,23 @@ function FilaCola({
               }}
             >
               ver en el mapa
+            </button>
+            {/* El mismo gesto que el puntaje, dicho con palabras.
+                El badge se podía tocar desde el principio, pero lo único que lo
+                delataba era el cursor y un `title` —que en un celular no
+                existe—, así que la función quedaba escondida detrás de un
+                número que parece una etiqueta. Con las fotos ahí adentro, eso
+                pasó de ser un detalle a esconder lo más útil de la fila. */}
+            <button
+              type="button"
+              className="enlace"
+              onClick={(evento) => {
+                evento.stopPropagation();
+                onAlternar();
+              }}
+              aria-expanded={expandido}
+            >
+              {expandido ? 'ocultar detalle' : 'desglose y fotos'}
             </button>
           </div>
 
