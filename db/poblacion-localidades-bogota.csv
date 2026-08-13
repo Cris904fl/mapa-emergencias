@@ -4,31 +4,32 @@
 # Secretaría Distrital de Planeación con el DANE, CC BY 4.0.
 # https://datosabiertos.bogota.gov.co/dataset/proyecciones-y-retroproyecciones-de-poblacion-2005-2035
 #
-# El total de cada localidad es la suma de todas las columnas Hombres_N y
-# Mujeres_N (edades 0 a 100), sumando las dos áreas de la fuente: cabecera
-# municipal y centro poblado y rural disperso.
+# El total de cada localidad es la suma de todas las columnas Hombres_* y
+# Mujeres_*, sumando las dos áreas de la fuente: cabecera municipal y centro
+# poblado y rural disperso.
 #
 # El año es 2018 a propósito, para que coincida con el censo que usan los
 # municipios: comparar reportes por habitante entre zonas exige el mismo
-# denominador. Regenerar con: node scripts/derivar-poblacion-localidades.mjs <ods> [anio]
+# denominador. Regenerar con:
+#   node scripts/derivar-poblacion-bogota.mjs <archivo.ods> [anio]
 codigo,nombre,poblacion
-01,Usaquén,535143
-02,Chapinero,156209
-03,Santa Fe,103904
-04,San Cristóbal,385380
-05,Usme,363339
-06,Tunjuelito,171564
-07,Bosa,694240
-08,Kennedy,1019314
-09,Fontibón,365720
-10,Engativá,792202
-11,Suba,1151774
-12,Barrios Unidos,133000
-13,Teusaquillo,144406
-14,Los Mártires,73231
-15,Antonio Nariño,79199
-16,Puente Aranda,242829
-17,La Candelaria,17047
-18,Rafael Uribe Uribe,364401
-19,Ciudad Bolivar,612972
+01,Usaquén,535693
+02,Chapinero,156479
+03,Santa Fe,103985
+04,San Cristóbal,385514
+05,Usme,363394
+06,Tunjuelito,171632
+07,Bosa,694397
+08,Kennedy,1019748
+09,Fontibón,365884
+10,Engativá,792518
+11,Suba,1152387
+12,Barrios Unidos,133126
+13,Teusaquillo,144526
+14,Los Mártires,73277
+15,Antonio Nariño,79229
+16,Puente Aranda,242905
+17,La Candelaria,17075
+18,Rafael Uribe Uribe,364532
+19,Ciudad Bolivar,613127
 20,Sumapaz,3138

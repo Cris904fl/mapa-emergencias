@@ -1,0 +1,192 @@
+[
+  {
+    "nombre": "Estación de Bomberos Chapinero - Miguel Ángel Rodríguez",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.6479918014215365,
+    "lng": -74.06253764680513,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 9A 61 77. Teléfono: 3485420. COMPAÑIA I.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-1"
+  },
+  {
+    "nombre": "Estación de Bomberos Central - Carlos Julio Rico Cuellar",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.606803325496183,
+    "lng": -74.08784364470293,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 11 20A 10. Teléfono: 3602845 / 3602861. COMPAÑIA III.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-2"
+  },
+  {
+    "nombre": "Estación de Bomberos Restrepo - José Demetrio Ortiz",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.589513259975896,
+    "lng": -74.10814983981658,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: AK 27 19A 20 SUR. Teléfono: 2727721 / 2727701. COMPAÑIA IV.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-3"
+  },
+  {
+    "nombre": "Estación de Bomberos Puente Aranda - Alberto Alfonso",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.645622463502445,
+    "lng": -74.1128581608506,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 20 68A 06. Teléfono: 2600106 / 2600087. COMPAÑIA III.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-4"
+  },
+  {
+    "nombre": "Estación de Bomberos Fontibón - Alexander Marín Segura",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.669606437658913,
+    "lng": -74.14297790516588,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 17 96G 64. Teléfono: 2676810 / 2676046. COMPAÑIA II.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-6"
+  },
+  {
+    "nombre": "Estación de Bomberos Ferias",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.696660823793724,
+    "lng": -74.09563766256825,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 77 A 77 36. Teléfono: 2508878 / 2506572. COMPAÑIA II.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-7"
+  },
+  {
+    "nombre": "Estación de Bomberos Bellavista",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.546082559071312,
+    "lng": -74.0814740467561,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 15E 41B 08 SUR. Teléfono: 2076167. COMPAÑIA IV.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-9"
+  },
+  {
+    "nombre": "Estación de Bomberos Marichuela",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.512008389831759,
+    "lng": -74.11699111184349,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 1A 76A BIS 09 SUR MJ. Teléfono: 2002342. COMPAÑIA IV.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-10"
+  },
+  {
+    "nombre": "Estación de Bomberos de La Candelaria",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.567687613346979,
+    "lng": -74.145439706761,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 62 SUR 22B 85. Teléfono: 7151464 / 2048252. COMPAÑIA V.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-11"
+  },
+  {
+    "nombre": "Estación de Bomberos Suba",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.741197997321669,
+    "lng": -74.08522695109497,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 92 146C 49. Teléfono: 6804141 / 6857486. COMPAÑIA II.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-12"
+  },
+  {
+    "nombre": "Estación de Bomberos Caobos Salazar - Jesús Alberto Álvarez Forero",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.72794345640781,
+    "lng": -74.04071101534386,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: AK 15 145 50. Teléfono: 6143290 / 6144105. COMPAÑIA I.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-13"
+  },
+  {
+    "nombre": "Estación de Bomberos Garcés Navas",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.714120471357357,
+    "lng": -74.12074812417816,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 110 77 24. Teléfono: 2272658 / 2273140. COMPAÑIA II.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-15"
+  },
+  {
+    "nombre": "Estación de Bomberos de Venecia - John Fernando Galindo Ursuga",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.591289109277678,
+    "lng": -74.13587046338402,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: DG 49A SUR 49 61. Teléfono: 2048209 / 2048252. COMPAÑIA V.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-16"
+  },
+  {
+    "nombre": "Estación de Bomberos Centro Histórico",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.592240803110956,
+    "lng": -74.06994493724568,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 9 3 12 ESTE. Teléfono: 2861305 / 2861288. COMPAÑIA III.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-17"
+  },
+  {
+    "nombre": "Estación de Bomberos de Bosa",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.610929836617571,
+    "lng": -74.1860495466712,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 63 SUR 80K 15. Teléfono: 7767991. COMPAÑIA V.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-8"
+  },
+  {
+    "nombre": "Estación de Bomberos de Kennedy - Alejandro Lince",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.620243299452085,
+    "lng": -74.1601705107587,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 79 41D 20 SUR. Teléfono: 2648343 / 2648232. COMPAÑIA III.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-5"
+  },
+  {
+    "nombre": "Estación de Bomberos Bicentenario de la Independencia",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.749961596230402,
+    "lng": -74.05674657468103,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 55 167 51. Teléfono: 6691685 / 6691700. COMPAÑIA I.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/B-14"
+  },
+  {
+    "nombre": "EDIFICIO COMANDO",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.645966973539856,
+    "lng": -74.11333111037298,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: CL 20 68A 06. Teléfono: 3822500 / 5781178. N/A.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/CO"
+  },
+  {
+    "nombre": "Escuela de formación bomberil",
+    "tipo": "ESTACION_BOMBEROS",
+    "lat": 4.494505475077623,
+    "lng": -74.08216705657361,
+    "capacidad_total": null,
+    "notas": "IDECA (Catastro Distrital), dato oficial. Dirección: KR 20 ESTE 90 SUR 100. Teléfono: N / A. N/A.",
+    "fuente": "ideca",
+    "fuente_id": "bomberos/Academia"
+  }
+]

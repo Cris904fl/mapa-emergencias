@@ -1,33 +1,47 @@
 #!/usr/bin/env node
 /**
- * Convierte la hoja de cálculo de proyecciones de población de Bogotá en el CSV
- * que lee `cargar-lugares.mjs`.
+ * Convierte las hojas de cálculo de proyecciones de población de Bogotá en los
+ * CSV que lee `cargar-lugares.mjs`.
  *
- *   node scripts/derivar-poblacion-localidades.mjs <archivo.ods> [anio]
+ *   node scripts/derivar-poblacion-bogota.mjs <archivo.ods> [anio]
+ *
+ * Detecta solo si la hoja es la de localidades o la de UPZ y escribe
+ * `db/poblacion-localidades-bogota.csv` o `db/poblacion-upz-bogota.csv`.
  *
  * ## Por qué existe como herramienta aparte
  *
  * La Secretaría Distrital de Planeación publica esto **solo en ODS** —no hay CSV
- * ni servicio consultable— y el archivo son 1,9 MB que descomprimidos son 31 MB
- * de XML: 843 filas por 2.314 columnas, con la población abierta por sexo y por
- * cada edad de 0 a 100, para cada localidad, cada año entre 2005 y 2035, y cada
- * área (cabecera y centro poblado / rural disperso).
+ * ni servicio consultable— y cada archivo son ~1,9 MB que descomprimidos son 30 MB
+ * de XML: miles de filas con la población abierta por sexo y edad, para cada zona,
+ * cada año entre 2005 y 2035, y cada área (cabecera y centro poblado / rural
+ * disperso).
  *
- * De todo eso salen veinte números. Meter un lector de ODS en el cargador para
- * eso sería cargar el peso permanente de un formato que se lee una vez al año, y
- * versionar el ODS engordaría el repositorio con 1,9 MB para guardar veinte
- * filas. Así que esto corre a mano, deja un CSV auditable de veinte líneas, y el
- * cargador no sabe que el ODS existe.
+ * De todo eso salen 20 o 112 números. Meter un lector de ODS en el cargador sería
+ * cargar el peso permanente de un formato que se lee una vez al año, y versionar
+ * los ODS engordaría el repositorio con 3,8 MB para guardar 132 filas. Así que
+ * esto corre a mano, deja CSV auditables, y el cargador no sabe que el ODS existe.
+ *
+ * ## Nada se lee por posición
+ *
+ * Las dos hojas tienen estructuras distintas: la de UPZ trae dos columnas más, el
+ * año está en otro sitio, y los grupos de edad son rangos (`Hombres_0-4`, hasta
+ * `Mujeres_85 y más`) mientras la de localidades usa edades sueltas
+ * (`Hombres_0`..`Hombres_100`). Todo se ubica por el **nombre** de la columna en la
+ * cabecera. Contar posiciones habría funcionado con el primer archivo y habría
+ * leído el año en la casilla del área con el segundo.
  *
  * ## Por qué el año por omisión es 2018 y no el actual
  *
  * Los municipios llevan la población del censo de 2018 (`stp27_pers` del MGN
- * integrado). Si las localidades llevaran la proyección de 2026, el panel de
+ * integrado). Si las zonas de Bogotá llevaran la proyección de 2026, el panel de
  * zonas compararía razones por habitante calculadas con denominadores de años
  * distintos, y las de Bogotá saldrían sistemáticamente más bajas por usar una
- * población más grande. **Para comparar entre zonas importa más que el año sea el
- * mismo que que sea reciente.** Se puede pedir otro año como segundo argumento,
- * pero entonces habría que mover también el de los municipios.
+ * población mayor. **Para comparar entre zonas importa más que el año sea el mismo
+ * que que sea reciente.**
+ *
+ * Queda una diferencia que no se puede eliminar: el censo cuenta a quien encontró
+ * y la serie distrital corrige la omisión censal, así que para Bogotá 2018 son
+ * 3,2 % de diferencia entre las dos. La misma cifra medida de dos maneras.
  *
  * Fuente: «Proyecciones y retroproyecciones de Población (2005 - 2035)»,
  * Secretaría Distrital de Planeación con el DANE, versión de marzo de 2025,
@@ -41,12 +55,36 @@ import path from 'node:path';
 
 const ANIO_POR_OMISION = 2018;
 
+/**
+ * Los dos niveles que sabe leer, en orden de preferencia.
+ *
+ * La hoja de UPZ trae también las columnas de localidad, así que si se encuentran
+ * las de UPZ hay que quedarse con esas: son las más específicas del archivo.
+ */
+const NIVELES = [
+  {
+    nombre: 'UPZ',
+    columnaCodigo: 'Código UPZ',
+    columnaNombre: 'Nombre UPZ',
+    /** IDECA publica los códigos sin rellenar («57»); la hoja con tres («057»). */
+    anchoCodigo: 3,
+    salida: 'poblacion-upz-bogota.csv',
+  },
+  {
+    nombre: 'localidad',
+    columnaCodigo: 'Código Localidad',
+    columnaNombre: 'Nombre Localidad',
+    anchoCodigo: 2,
+    salida: 'poblacion-localidades-bogota.csv',
+  },
+];
+
 const [rutaOds, anioPedido] = process.argv.slice(2);
 const anio = Number(anioPedido ?? ANIO_POR_OMISION);
 
 if (!rutaOds) {
   console.error(
-    'Uso: node scripts/derivar-poblacion-localidades.mjs <archivo.ods> [anio]\n' +
+    'Uso: node scripts/derivar-poblacion-bogota.mjs <archivo.ods> [anio]\n' +
       `  anio por omisión: ${ANIO_POR_OMISION} (ver la nota de la cabecera)`,
   );
   process.exit(1);
@@ -66,8 +104,6 @@ if (!Number.isInteger(anio) || anio < 2005 || anio > 2035) {
  * los tiene.
  */
 function extraerDelZip(buffer, nombreBuscado) {
-  // Fin del directorio central: se busca hacia atrás porque lleva un comentario
-  // de longitud variable al final.
   let fin = -1;
   for (let i = buffer.length - 22; i >= 0 && i > buffer.length - 65_557; i--) {
     if (buffer.readUInt32LE(i) === 0x06054b50) {
@@ -81,9 +117,8 @@ function extraerDelZip(buffer, nombreBuscado) {
   let cursor = buffer.readUInt32LE(fin + 16);
 
   for (let n = 0; n < entradas; n++) {
-    if (buffer.readUInt32LE(cursor) !== 0x02014b50) {
-      throw new Error('Directorio central corrupto.');
-    }
+    if (buffer.readUInt32LE(cursor) !== 0x02014b50) throw new Error('Directorio central corrupto.');
+
     const metodo = buffer.readUInt16LE(cursor + 10);
     const comprimido = buffer.readUInt32LE(cursor + 20);
     const largoNombre = buffer.readUInt16LE(cursor + 28);
@@ -93,28 +128,25 @@ function extraerDelZip(buffer, nombreBuscado) {
     const nombre = buffer.toString('utf8', cursor + 46, cursor + 46 + largoNombre);
 
     if (nombre === nombreBuscado) {
-      // En el encabezado local los largos de nombre y extra pueden diferir de los
-      // del directorio, así que se releen acá.
+      // Los largos del encabezado local pueden diferir de los del directorio.
       const nombreLocal = buffer.readUInt16LE(desplazamiento + 26);
       const extraLocal = buffer.readUInt16LE(desplazamiento + 28);
       const inicio = desplazamiento + 30 + nombreLocal + extraLocal;
       const datos = buffer.subarray(inicio, inicio + comprimido);
       return metodo === 0 ? datos : inflateRawSync(datos);
     }
-
     cursor += 46 + largoNombre + largoExtra + largoComentario;
   }
   throw new Error(`El ZIP no contiene «${nombreBuscado}».`);
 }
 
 /**
- * Las celdas de una fila de ODS, expandiendo las repeticiones.
+ * Las celdas de una fila, expandiendo las repeticiones.
  *
  * OpenDocument comprime las celdas iguales consecutivas con
- * `table:number-columns-repeated`, así que sin expandirlas las columnas se
- * desalinean y uno acaba leyendo el año en la casilla del área. El tope de 4096
- * es para no expandir las repeticiones de relleno del final de la hoja, que
- * pueden declarar decenas de miles de columnas vacías.
+ * `table:number-columns-repeated`, y sin expandirlas las columnas se desalinean.
+ * El tope de 4096 evita expandir el relleno del final de la hoja, que declara
+ * decenas de miles de columnas vacías.
  */
 function celdasDeFila(xmlFila) {
   const celdas = [];
@@ -141,93 +173,108 @@ const filas = [...contenido.matchAll(/<table:table-row[^>]*>([\s\S]*?)<\/table:t
   (f) => f[1],
 );
 
-// La cabecera se busca por su contenido y no por su número de fila: la hoja trae
-// filas de adorno arriba y contar a mano sería frágil.
+// La cabecera se busca por su contenido: la hoja trae filas de adorno arriba y
+// contarlas a mano sería frágil.
 const indiceCabecera = filas.findIndex((f) => {
   const c = celdasDeFila(f);
-  return c[4] === 'Código Localidad' && c[7] === 'AÑO';
+  return c.includes('AÑO') && c.some((x) => x === 'Código Localidad' || x === 'Código UPZ');
 });
 
 if (indiceCabecera < 0) {
   console.error(
-    'No se encontró la fila de cabecera esperada (con «Código Localidad» y «AÑO»).\n' +
+    'No se encontró la cabecera esperada (una fila con «AÑO» y «Código UPZ» o «Código Localidad»).\n' +
       'Si la fuente cambió la estructura de la hoja, hay que revisar este script.',
   );
   process.exit(1);
 }
 
 const cabecera = celdasDeFila(filas[indiceCabecera]);
-const columnasPoblacion = cabecera
-  .map((nombre, i) => ({ nombre, i }))
-  .filter(({ nombre }) => /^(Hombres|Mujeres)_\d+$/.test(nombre))
-  .map(({ i }) => i);
+const nivel = NIVELES.find((n) => cabecera.includes(n.columnaCodigo));
 
-if (columnasPoblacion.length === 0) {
-  console.error('No se encontró ninguna columna Hombres_N ni Mujeres_N.');
+if (!nivel) {
+  console.error('La hoja no trae ninguna columna de código reconocida.');
   process.exit(1);
 }
 
-/** código de localidad → { nombre, poblacion } sumando sexos, edades y áreas. */
-const porLocalidad = new Map();
+const colCodigo = cabecera.indexOf(nivel.columnaCodigo);
+const colNombre = cabecera.indexOf(nivel.columnaNombre);
+const colAnio = cabecera.indexOf('AÑO');
+// Prefijo y no `_\d+$`: la hoja de localidades usa edades sueltas («Hombres_0») y
+// la de UPZ usa rangos que terminan en texto («Mujeres_85 y más»).
+const colsPoblacion = cabecera
+  .map((nombre, i) => ({ nombre, i }))
+  .filter(({ nombre }) => /^(Hombres|Mujeres)_/.test(nombre))
+  .map(({ i }) => i);
+
+if (colNombre < 0 || colAnio < 0 || colsPoblacion.length === 0) {
+  console.error(
+    `Cabecera incompleta para ${nivel.nombre}: ` +
+      `nombre=${colNombre}, año=${colAnio}, columnas de población=${colsPoblacion.length}`,
+  );
+  process.exit(1);
+}
+
+const porZona = new Map();
 let filasUsadas = 0;
 
 for (let i = indiceCabecera + 1; i < filas.length; i++) {
   const c = celdasDeFila(filas[i]);
-  if (c.length < 9 || Number(c[7]) !== anio) continue;
+  if (c.length <= colAnio || Number(c[colAnio]) !== anio) continue;
 
-  const codigo = String(c[4] ?? '').trim();
+  const codigo = String(c[colCodigo] ?? '').trim();
   if (!codigo) continue;
 
-  // El código viene sin ceros a la izquierda («1») y IDECA lo publica con dos
-  // dígitos («01»). Se normaliza acá para que las dos fuentes se puedan cruzar.
-  const llave = codigo.padStart(2, '0');
+  const llave = codigo.padStart(nivel.anchoCodigo, '0');
   let total = 0;
-  for (const col of columnasPoblacion) {
+  for (const col of colsPoblacion) {
     const valor = Number(String(c[col] ?? '').replace(/[^\d.-]/g, ''));
     if (Number.isFinite(valor)) total += valor;
   }
 
-  const previo = porLocalidad.get(llave);
-  // Se suma en vez de asignar: cada localidad puede aparecer dos veces, una por
+  const previo = porZona.get(llave);
+  // Se suma en vez de asignar: cada zona puede aparecer dos veces, una por
   // cabecera municipal y otra por centro poblado y rural disperso.
-  porLocalidad.set(llave, {
-    nombre: previo?.nombre ?? String(c[5] ?? '').trim(),
+  porZona.set(llave, {
+    nombre: previo?.nombre ?? String(c[colNombre] ?? '').trim(),
     poblacion: (previo?.poblacion ?? 0) + Math.round(total),
   });
   filasUsadas++;
 }
 
-if (porLocalidad.size === 0) {
+if (porZona.size === 0) {
   console.error(`No se encontró ninguna fila del año ${anio}.`);
   process.exit(1);
 }
 
 // --------------------------------------------------------------- escritura
 
-const salida = path.resolve('db', 'poblacion-localidades-bogota.csv');
+const salida = path.resolve('db', nivel.salida);
 const lineas = [
-  `# Población por localidad de Bogotá, año ${anio}.`,
+  `# Población por ${nivel.nombre} de Bogotá, año ${anio}.`,
   '#',
   '# Derivado de «Proyecciones y retroproyecciones de Población (2005 - 2035)»,',
   '# Secretaría Distrital de Planeación con el DANE, CC BY 4.0.',
   '# https://datosabiertos.bogota.gov.co/dataset/proyecciones-y-retroproyecciones-de-poblacion-2005-2035',
   '#',
-  '# El total de cada localidad es la suma de todas las columnas Hombres_N y',
-  '# Mujeres_N (edades 0 a 100), sumando las dos áreas de la fuente: cabecera',
-  '# municipal y centro poblado y rural disperso.',
+  `# El total de cada ${nivel.nombre} es la suma de todas las columnas Hombres_* y`,
+  '# Mujeres_*, sumando las dos áreas de la fuente: cabecera municipal y centro',
+  '# poblado y rural disperso.',
   '#',
   `# El año es ${anio} a propósito, para que coincida con el censo que usan los`,
   '# municipios: comparar reportes por habitante entre zonas exige el mismo',
-  '# denominador. Regenerar con: node scripts/derivar-poblacion-localidades.mjs <ods> [anio]',
+  '# denominador. Regenerar con:',
+  '#   node scripts/derivar-poblacion-bogota.mjs <archivo.ods> [anio]',
   'codigo,nombre,poblacion',
-  ...[...porLocalidad.entries()]
+  ...[...porZona.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([codigo, { nombre, poblacion }]) => `${codigo},${nombre},${poblacion}`),
 ];
 
 writeFileSync(salida, lineas.join('\n') + '\n', 'utf8');
 
-const total = [...porLocalidad.values()].reduce((a, x) => a + x.poblacion, 0);
-console.log(`Año ${anio} · ${filasUsadas} fila(s) de la hoja · ${porLocalidad.size} localidades`);
-console.log(`Total Bogotá: ${total.toLocaleString('es-CO')} habitantes`);
+const total = [...porZona.values()].reduce((a, x) => a + x.poblacion, 0);
+console.log(
+  `Nivel ${nivel.nombre} · año ${anio} · ${filasUsadas} fila(s) de la hoja · ${porZona.size} zonas`,
+);
+console.log(`Total: ${total.toLocaleString('es-CO')} habitantes`);
 console.log(`Escrito: ${salida}`);

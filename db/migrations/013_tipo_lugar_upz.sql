@@ -1,0 +1,25 @@
+-- ---------------------------------------------------------------------------
+-- 013 · La UPZ como tipo de lugar
+-- ---------------------------------------------------------------------------
+--
+-- Bogotá tiene 112 Unidades de Planeamiento Zonal, y son el nivel que hace
+-- despachable la ciudad: una localidad como Suba tiene 1 151 774 habitantes —más
+-- que Medellín— así que decir «el reporte está en Suba» sigue sin decir a dónde
+-- ir. Una UPZ tiene decenas de miles.
+--
+-- Se agrega un valor al enum en vez de reusar `BARRIO`, que era la alternativa
+-- gratis, porque una UPZ **contiene** barrios: etiquetarla como uno haría que el
+-- panel de zonas mostrara «PASEO DE LOS LIBERTADORES · barrio» cuando es una
+-- agrupación de varios. Es una imprecisión pequeña y de las que este sistema no
+-- se permite en pantalla.
+--
+-- `tipo_lugar` no está espejado en `apps/api/src/esquemas/dominio.ts` —la API lo
+-- entrega como texto y el front lo muestra en minúsculas— así que este valor
+-- nuevo no obliga a tocar código. Si algún día ese enum se espeja, hay que
+-- acordarse.
+--
+-- ALTER TYPE ... ADD VALUE corre dentro de una transacción desde PostgreSQL 12 y
+-- no reescribe la tabla; lo único que no se puede es usar el valor nuevo en la
+-- misma transacción, y acá no se usa.
+
+ALTER TYPE tipo_lugar ADD VALUE IF NOT EXISTS 'UPZ';

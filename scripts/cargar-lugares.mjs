@@ -127,6 +127,30 @@ const NIVELES = [
      */
     prefijoCodigo: '11001-',
     esperados: 20,
+    /** Población distrital, derivada del ODS de la SDP. Ver el script de derivación. */
+    csvPoblacion: 'poblacion-localidades-bogota.csv',
+  },
+  {
+    tipo: 'UPZ',
+    raiz: RAIZ_IDECA,
+    servicio: 'ordenamientoterritorial/unidadplaneamientozonal/MapServer/0',
+    campoCodigo: 'CODIGO_UPZ',
+    campoNombre: 'NOMBRE',
+    campoPadre: null,
+    codigoPadreFijo: '11001',
+    /**
+     * Prefijo distinto del de las localidades porque los códigos se solapan: hay
+     * localidad «11» y UPZ «11». Sin distinguirlos, la carga se comería filas.
+     */
+    prefijoCodigo: '11001-upz-',
+    /**
+     * IDECA publica los códigos sin rellenar («57») y la hoja de población con
+     * tres dígitos («057»). Se normaliza a tres para que las dos fuentes se
+     * crucen; si no, la población no le pegaría a ninguna UPZ y nadie avisaría.
+     */
+    anchoCodigo: 3,
+    esperados: 112,
+    csvPoblacion: 'poblacion-upz-bogota.csv',
   },
 ];
 
@@ -215,6 +239,17 @@ const soloPoblacion = argumentos.includes('--solo-poblacion');
  */
 const conLocalidades = argumentos.includes('--con-localidades');
 
+/**
+ * Las UPZ de Bogotá: 112 unidades, el nivel que hace despachable la ciudad.
+ *
+ * Van tras su propia bandera y no dentro de `--con-localidades` porque son
+ * decisiones distintas: con las dos cargadas, la UPZ le gana a la localidad en el
+ * trigger —es más pequeña— así que activar esto cambia otra vez a dónde resuelven
+ * los reportes de Bogotá. Requiere `db/poblacion-upz-bogota.csv`, o las 112
+ * quedarían sin denominador.
+ */
+const conUpz = argumentos.includes('--con-upz');
+
 const aCargar =
   soloZonas || soloPoblacion
     ? // Ni `--solo-zonas` ni `--solo-poblacion` bajan geometría. Son operaciones
@@ -226,7 +261,8 @@ const aCargar =
         (n) =>
           n.tipo === 'MUNICIPIO' ||
           (n.tipo === 'DEPARTAMENTO' && conDepartamentos) ||
-          (n.tipo === 'LOCALIDAD' && conLocalidades),
+          (n.tipo === 'LOCALIDAD' && conLocalidades) ||
+          (n.tipo === 'UPZ' && conUpz),
       );
 
 /** La población se carga siempre, salvo cuando se pidió expresamente otra cosa. */
@@ -422,7 +458,19 @@ async function descargarPoblacion() {
 }
 
 /**
- * La población de las localidades de Bogotá, del CSV del repositorio.
+ * El código con el que una entidad queda guardada en `lugares.codigo`.
+ *
+ * Rellena a la izquierda cuando el nivel lo pide y le pone su prefijo. Las dos
+ * cosas son necesarias para que el índice único global no confunda niveles ni
+ * fuentes: hay localidad «11» y UPZ «11», y el «11» del DANE es Bogotá entera.
+ */
+function codigoDe(nivel, crudo) {
+  const codigo = String(crudo ?? '').trim();
+  return (nivel.prefijoCodigo ?? '') + codigo.padStart(nivel.anchoCodigo ?? 0, '0');
+}
+
+/**
+ * La población de una zona de Bogotá, del CSV del repositorio.
  *
  * No se baja de ningún servicio porque no hay: la Secretaría Distrital de
  * Planeación lo publica solo en ODS. `scripts/derivar-poblacion-localidades.mjs`
@@ -435,8 +483,8 @@ async function descargarPoblacion() {
  * Devuelve `null` si el archivo no está, para que el cargador siga sirviendo sin
  * él en vez de fallar por un dato opcional.
  */
-function leerPoblacionLocalidades(prefijo) {
-  const ruta = path.resolve('db', 'poblacion-localidades-bogota.csv');
+function leerPoblacionDeCsv(nivel) {
+  const ruta = path.resolve('db', nivel.csvPoblacion);
 
   let texto;
   try {
@@ -452,11 +500,14 @@ function leerPoblacionLocalidades(prefijo) {
     if (!linea || linea.startsWith('#') || linea.startsWith('codigo,')) continue;
     const [codigo, , habitantes] = linea.split(',');
     const n = Number(habitantes);
-    if (codigo && Number.isFinite(n)) porCodigo.set(prefijo + codigo.trim(), Math.round(n));
+    // Se pasa por `codigoDe` y no se concatena a mano: la clave tiene que salir
+    // de la misma función que la escribió al insertar, o la población no le pega
+    // a nada y el único síntoma sería una columna vacía en el tablero.
+    if (codigo && Number.isFinite(n)) porCodigo.set(codigoDe(nivel, codigo), Math.round(n));
   }
 
   if (!Number.isInteger(anio) || porCodigo.size === 0) return null;
-  return { anio, porCodigo };
+  return { anio, porCodigo, ruta };
 }
 
 // ---------------------------------------------------------------- descarga
@@ -628,7 +679,7 @@ try {
         parametros.push(
           e.properties[nivel.campoNombre].trim(),
           nivel.tipo,
-          (nivel.prefijoCodigo ?? '') + e.properties[nivel.campoCodigo],
+          codigoDe(nivel, e.properties[nivel.campoCodigo]),
           JSON.stringify(e.geometry),
         );
       });
@@ -728,14 +779,14 @@ try {
    * cifra para el mismo año y el mismo territorio, medida de dos maneras.
    */
   if (conPoblacion) {
-    const localidades = NIVELES.find((n) => n.tipo === 'LOCALIDAD');
-    const csv = leerPoblacionLocalidades(localidades.prefijoCodigo);
+    for (const nivel of NIVELES.filter((n) => n.csvPoblacion)) {
+      const csv = leerPoblacionDeCsv(nivel);
 
-    if (!csv) {
-      console.log(
-        '  POBLACIÓN: sin db/poblacion-localidades-bogota.csv, las localidades quedan sin población.',
-      );
-    } else {
+      if (!csv) {
+        console.log(`  POBLACIÓN: falta db/${nivel.csvPoblacion}, ${nivel.tipo} sin población.`);
+        continue;
+      }
+
       const { rowCount } = await cliente.query(
         `UPDATE lugares AS l
             SET poblacion = p.habitantes,
@@ -744,10 +795,11 @@ try {
           WHERE l.codigo = p.codigo`,
         [[...csv.porCodigo.keys()], [...csv.porCodigo.values()], csv.anio],
       );
+
       console.log(
         rowCount > 0
-          ? `  POBLACIÓN: ${rowCount} localidad(es) con población distrital de ${csv.anio}`
-          : '  POBLACIÓN: ninguna localidad cargada todavía (use --con-localidades)',
+          ? `  POBLACIÓN: ${rowCount} ${nivel.tipo} con población distrital de ${csv.anio}`
+          : `  POBLACIÓN: ningún ${nivel.tipo} cargado todavía`,
       );
     }
   }
