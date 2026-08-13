@@ -130,21 +130,51 @@ const soloZonas = argumentos.includes('--solo-zonas');
 const asignarZonas = soloZonas || argumentos.includes('--asignar-zonas');
 
 /**
+ * Cargar solo la población, sin volver a bajar la geometría.
+ *
+ * Es el caso normal después de la primera carga: la geometría de los municipios
+ * no cambia entre censos, la población sí. Y la diferencia de costo es enorme —
+ * la población son 1.122 filas sin geometría, unos pocos kilobytes contra los
+ * 10 MB de los polígonos.
+ */
+const soloPoblacion = argumentos.includes('--solo-poblacion');
+
+/**
  * Los niveles que se van a cargar de verdad.
  *
  * Sin `--con-departamentos` se carga solo el municipio: es el nivel que hace
  * útil el panel de «Zonas» y el único que resuelve sin ambigüedad (ver la nota
  * de la cabecera sobre Bogotá).
  */
-const aCargar = soloZonas
-  ? // `--solo-zonas` no baja ni escribe geografía: solo les asigna zona a los
-    // reportes que ya están. Son dos operaciones independientes y juntarlas
-    // obligaba a bajar 10 MB para hacer un UPDATE — y a exponerse a que la
-    // descarga falle en algo que no la necesita.
-    []
-  : conDepartamentos
-    ? NIVELES
-    : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
+const aCargar =
+  soloZonas || soloPoblacion
+    ? // Ni `--solo-zonas` ni `--solo-poblacion` bajan geometría. Son operaciones
+      // independientes de la carga, y juntarlas obligaba a bajar 10 MB para hacer
+      // un UPDATE — y a exponerse a que la descarga falle en algo que no la
+      // necesita.
+      []
+    : conDepartamentos
+      ? NIVELES
+      : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
+
+/** La población se carga siempre, salvo cuando se pidió expresamente otra cosa. */
+const conPoblacion = soloPoblacion || !soloZonas;
+
+/**
+ * De dónde sale la población.
+ *
+ * `stp27_pers` del MGN integrado con el censo de 2018. El nombre del campo no
+ * dice nada, así que se verificó contra cifras conocidas antes de confiar en él:
+ * Bogotá da 7 181 469, que es exactamente el dato publicado del CNPV 2018, y
+ * coincide con la suma de la población por sexo (`stp32_1_se + stp32_2_se`) en
+ * todos los municipios probados. Dos vías independientes al mismo número.
+ */
+const POBLACION = {
+  servicio: 'MGN_INTEGRADO_CNPV2018_gdb/FeatureServer/4',
+  campoCodigo: 'mpio_cdpmp',
+  campoPoblacion: 'stp27_pers',
+  anio: 2018,
+};
 
 if (conDepartamentos) {
   console.warn(
@@ -259,6 +289,66 @@ async function descargar(nivel) {
   return entidades;
 }
 
+/**
+ * La población de cada municipio, sin geometría.
+ *
+ * `returnGeometry=false` es lo que hace que esto sea barato: son 1.122 filas de
+ * dos campos, unos pocos kilobytes, frente a los 10 MB de los polígonos. Cabe en
+ * tres peticiones y casi no está expuesto a que el socket se caiga.
+ */
+async function descargarPoblacion() {
+  const POR_PAGINA_SIN_GEOM = 500;
+  const porCodigo = new Map();
+
+  for (let desde = 0; ; desde += POR_PAGINA_SIN_GEOM) {
+    const parametros = new URLSearchParams({
+      where: '1=1',
+      outFields: `${POBLACION.campoCodigo},${POBLACION.campoPoblacion}`,
+      orderByFields: POBLACION.campoCodigo,
+      resultOffset: String(desde),
+      resultRecordCount: String(POR_PAGINA_SIN_GEOM),
+      returnGeometry: 'false',
+      f: 'json',
+    });
+
+    let cuerpo;
+    for (let intento = 1; ; intento++) {
+      try {
+        const respuesta = await fetch(`${RAIZ}/${POBLACION.servicio}/query?${parametros}`, {
+          signal: AbortSignal.timeout(LIMITE_MS),
+        });
+        if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+        cuerpo = await respuesta.json();
+        if (cuerpo.error) {
+          const fallo = new Error(cuerpo.error.message ?? 'sin detalle');
+          fallo.definitivo = true;
+          throw fallo;
+        }
+        break;
+      } catch (error) {
+        if (error.definitivo || intento > REINTENTOS) throw error;
+        const espera = 1000 * 2 ** (intento - 1);
+        console.error(`\n  reintento ${intento}/${REINTENTOS} en ${espera / 1000}s: ${motivo(error)}`);
+        await esperar(espera);
+      }
+    }
+
+    const filas = cuerpo.features ?? [];
+    for (const fila of filas) {
+      const codigo = fila.attributes?.[POBLACION.campoCodigo];
+      const habitantes = fila.attributes?.[POBLACION.campoPoblacion];
+      // Un municipio sin dato se deja sin población: NULL significa «no se sabe»
+      // y es distinto de cero, que significaría que no vive nadie.
+      if (codigo && Number.isFinite(habitantes)) porCodigo.set(codigo, Math.round(habitantes));
+    }
+
+    process.stdout.write(`\r  POBLACIÓN: ${porCodigo.size}`);
+    if (filas.length < POR_PAGINA_SIN_GEOM) break;
+  }
+  process.stdout.write('\n');
+  return porCodigo;
+}
+
 // ---------------------------------------------------------------- descarga
 
 /**
@@ -292,15 +382,19 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-if (!soloZonas) {
+if (aCargar.length > 0) {
   console.log(
-    `Bajando el MGN del DANE (tolerancia ${tolerancia} grados ≈ ${Math.round(tolerancia * 111_320)} m)…`,
+    `Bajando la geografía del MGN (tolerancia ${tolerancia} grados ≈ ${Math.round(tolerancia * 111_320)} m)…`,
   );
+} else if (conPoblacion) {
+  console.log('Bajando solo la población del censo (sin geometría)…');
 }
 
 const porNivel = new Map();
+let poblacionPorCodigo = new Map();
 try {
   for (const nivel of aCargar) porNivel.set(nivel.tipo, await descargar(nivel));
+  if (conPoblacion) poblacionPorCodigo = await descargarPoblacion();
 } catch (error) {
   console.error(`\nFALLO bajando los datos: ${motivo(error)}`);
   console.error('No se escribió nada: la validación y la carga van después de bajar todo.');
@@ -469,6 +563,22 @@ try {
       );
       console.log(`  ${nivel.tipo}: ${codigos.length} colgados de su departamento`);
     }
+  }
+
+  // ------------------------------------------------------------- población
+  if (poblacionPorCodigo.size > 0) {
+    const codigos = [...poblacionPorCodigo.keys()];
+    const habitantes = [...poblacionPorCodigo.values()];
+
+    const { rowCount } = await cliente.query(
+      `UPDATE lugares AS l
+          SET poblacion = p.habitantes,
+              poblacion_anio = $3
+         FROM unnest($1::text[], $2::int[]) AS p(codigo, habitantes)
+        WHERE l.codigo = p.codigo`,
+      [codigos, habitantes, POBLACION.anio],
+    );
+    console.log(`  POBLACIÓN: ${rowCount} lugar(es) con población del censo ${POBLACION.anio}`);
   }
 
   const { rows: resumen } = await cliente.query(

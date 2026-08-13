@@ -304,6 +304,16 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
 
           <section className="panel">
             <h2>Zonas</h2>
+            {/* El «por 10 mil» es la columna que cambia lo que se entiende de
+                esta tabla. Cuatro reportes en Bogotá y uno en Ocaña son 4 contra
+                1 en crudo, y 0.006 contra 0.090 por cada diez mil habitantes: el
+                de Ocaña pesa quince veces más sobre su comunidad. Sin
+                denominador, una ciudad grande siempre encabeza la tabla por el
+                simple hecho de ser grande, y los municipios pequeños —donde una
+                emergencia afecta a todo el mundo— quedan al final.
+
+                Se ordena por esa razón cuando hay población, y los que no la
+                tienen caen al final en vez de desaparecer. */}
             {zonas.length === 0 ? (
               <p className="vacio">Sin zonas con reportes abiertos.</p>
             ) : (
@@ -312,23 +322,43 @@ export function Tablero({ onIrACampo }: { onIrACampo: () => void }) {
                   <tr>
                     <th>Zona</th>
                     <th>Rep.</th>
+                    <th title="Reportes por cada diez mil habitantes">×10k</th>
                     <th>Pers.</th>
                     <th>Atrap.</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {zonas.map((zona) => (
-                    <tr key={zona.lugar_id}>
-                      <td>
-                        {zona.lugar}
-                        <br />
-                        <small className="tenue">{zona.tipo_lugar.toLowerCase()}</small>
-                      </td>
-                      <td>{zona.reportes_abiertos}</td>
-                      <td>{zona.personas_afectadas}</td>
-                      <td>{zona.personas_atrapadas}</td>
-                    </tr>
-                  ))}
+                  {[...zonas]
+                    .sort(
+                      (a, b) =>
+                        (b.reportes_por_diez_mil ?? -1) - (a.reportes_por_diez_mil ?? -1),
+                    )
+                    .map((zona) => (
+                      <tr key={zona.lugar_id}>
+                        <td>
+                          {zona.lugar}
+                          <br />
+                          <small className="tenue">
+                            {zona.tipo_lugar.toLowerCase()}
+                            {zona.poblacion !== null && (
+                              <>
+                                {' · '}
+                                {zona.poblacion.toLocaleString('es-CO')} hab.
+                                {zona.poblacion_anio !== null && ` (${zona.poblacion_anio})`}
+                              </>
+                            )}
+                          </small>
+                        </td>
+                        <td>{zona.reportes_abiertos}</td>
+                        <td title={zona.poblacion === null ? 'Sin población conocida' : undefined}>
+                          {zona.reportes_por_diez_mil === null
+                            ? '—'
+                            : zona.reportes_por_diez_mil.toFixed(2)}
+                        </td>
+                        <td>{zona.personas_afectadas}</td>
+                        <td>{zona.personas_atrapadas}</td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             )}

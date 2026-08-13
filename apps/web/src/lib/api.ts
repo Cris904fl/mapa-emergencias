@@ -138,6 +138,20 @@ export type Zona = {
   prioridad_maxima: number | null;
   lat: number;
   lng: number;
+  /**
+   * Habitantes de la zona y el año del dato. `null` cuando no se sabe, que es
+   * distinto de cero: hay municipios en el MGN que no estaban en el censo.
+   */
+  poblacion: number | null;
+  poblacion_anio: number | null;
+  /**
+   * Reportes por cada diez mil habitantes.
+   *
+   * Es lo que distingue once reportes en un pueblo de tres mil de once en
+   * Bogotá: el mismo número, dos situaciones distintas. `null` sin población.
+   */
+  reportes_por_diez_mil: number | null;
+  afectados_por_mil: number | null;
 };
 
 /** Nombres de filtro, espejo de apps/api/src/esquemas/filtros.ts. */
