@@ -45,6 +45,21 @@ const esquema = z.object({
   SUPABASE_BUCKET: z.string().default('medios-reportes'),
 
   /**
+   * Notificaciones push a quien reportó.
+   *
+   * Sin las tres, la función queda apagada y todo lo demás sigue igual: es una
+   * comodidad, no un requisito para recibir un pedido de auxilio.
+   *
+   * Las claves VAPID identifican a este servidor ante los servicios de push de
+   * los fabricantes. **Cambiarlas invalida todas las suscripciones existentes**,
+   * así que se generan una vez y se conservan.
+   */
+  VAPID_CLAVE_PUBLICA: z.string().min(40).optional(),
+  VAPID_CLAVE_PRIVADA: z.string().min(20).optional(),
+  /** Correo de contacto que exige el estándar, por si un servicio necesita avisar. */
+  VAPID_CONTACTO: z.string().default('mailto:soporte@example.org'),
+
+  /**
    * Secreto para la ruta de mantenimiento que refresca prioridades.
    *
    * Solo hace falta en un despliegue sin Redis, donde un cron externo reemplaza

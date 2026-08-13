@@ -12,6 +12,7 @@ import { rutasReportes } from './rutas/reportes.ts';
 import { rutasRecursos } from './rutas/recursos.ts';
 import { rutasTablero } from './rutas/tablero.ts';
 import { rutasCampo } from './rutas/campo.ts';
+import { rutasNotificaciones } from './rutas/notificaciones.ts';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -141,6 +142,7 @@ export async function construirApp(): Promise<FastifyInstance> {
   await app.register(rutasRecursos);
   await app.register(rutasTablero);
   await app.register(rutasCampo);
+  await app.register(rutasNotificaciones);
 
   return app;
 }

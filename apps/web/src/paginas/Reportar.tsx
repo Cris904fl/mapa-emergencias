@@ -10,6 +10,7 @@ import {
 } from '../lib/geo.ts';
 import { formatearBytes, reducirFoto } from '../lib/imagen.ts';
 import { ConsultarCaso } from '../componentes/ConsultarCaso.tsx';
+import { estadoPermiso, suscribirseAReporte } from '../lib/notificaciones.ts';
 
 /**
  * Formulario ciudadano.
@@ -86,6 +87,22 @@ export function Reportar() {
   const [ultimoGuardado, setUltimoGuardado] = useState<string | null>(null);
   const [bandeja, setBandeja] = useState<ElementoBandeja[]>([]);
   const [enLinea, setEnLinea] = useState(navigator.onLine);
+
+  /**
+   * Estado del ofrecimiento de avisos push tras enviar un reporte.
+   *
+   * `oculto` cubre los casos en que ni siquiera se pregunta: el navegador no
+   * soporta notificaciones, o la persona ya las negó antes. Insistir con un
+   * permiso denegado no lo revierte —hay que ir a los ajustes del navegador— y
+   * solo sirve para molestar.
+   */
+  const [avisos, setAvisos] = useState<'oculto' | 'ofrecer' | 'activo' | 'fallido' | 'omitido'>(
+    'oculto',
+  );
+
+  async function activarAvisos(codigo: string) {
+    setAvisos((await suscribirseAReporte(codigo)) ? 'activo' : 'fallido');
+  }
 
   // Pedir la ubicación al abrir: es el dato que más tarda, así que conviene
   // arrancarlo mientras la persona escoge el tipo de emergencia.
@@ -234,6 +251,25 @@ export function Reportar() {
     ? bandeja.find((elemento) => elemento.id_cliente === ultimoGuardado)
     : undefined;
 
+  /**
+   * Ofrecer los avisos cuando el reporte queda confirmado por el servidor.
+   *
+   * Se espera a la confirmación y no al guardado local porque hasta que no hay
+   * código público no hay a qué suscribirse. Un reporte que salió sin señal
+   * ofrecerá los avisos cuando la bandeja lo sincronice.
+   */
+  useEffect(() => {
+    if (recienGuardado?.estado !== 'confirmado' || !recienGuardado.codigo_publico) return;
+    setAvisos((anterior) => {
+      if (anterior !== 'oculto') return anterior;
+      // Si ya los negó antes, no se pregunta: el navegador recuerda el «no» y
+      // volver a pedirlo no lo revierte, solo molesta.
+      return estadoPermiso() === 'sin-pedir' || estadoPermiso() === 'concedido'
+        ? 'ofrecer'
+        : 'oculto';
+    });
+  }, [recienGuardado?.estado, recienGuardado?.codigo_publico]);
+
   const pendientes = bandeja.filter(
     (elemento) => elemento.estado === 'pendiente' || elemento.estado === 'enviando',
   );
@@ -270,6 +306,46 @@ export function Reportar() {
                   emergencia la coordinación pasa por ahí de todas formas, y un
                   vecino que reenvía el código está avisando a quien sí puede
                   llegar. Se usa el enlace wa.me, que abre la app instalada. */}
+              {/* El permiso de notificaciones se pide acá y no al abrir la app.
+                  Un navegador que pregunta antes de que la persona sepa para
+                  qué sirve el sitio recibe un «no» casi siempre, y ese «no» se
+                  recuerda para siempre. Justo después de reportar es el único
+                  momento en que «¿le avisamos cuando alguien tome su caso?»
+                  tiene una respuesta obvia. */}
+              {avisos === 'ofrecer' && recienGuardado.codigo_publico && (
+                <div className="ofrecer-avisos">
+                  <p>
+                    ¿Quiere que le avisemos cuando alguien tome su caso, llegue al
+                    sitio o lo cierre?
+                  </p>
+                  <div className="acciones-confirmacion">
+                    <button
+                      type="button"
+                      className="principal"
+                      onClick={() => void activarAvisos(recienGuardado.codigo_publico!)}
+                    >
+                      Sí, avísenme
+                    </button>
+                    <button type="button" className="enlace" onClick={() => setAvisos('omitido')}>
+                      ahora no
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {avisos === 'activo' && (
+                <p className="avisos-activos">
+                  Le avisaremos a este teléfono cuando su caso avance.
+                </p>
+              )}
+
+              {avisos === 'fallido' && (
+                <p className="nota-campo">
+                  No se pudieron activar los avisos en este teléfono. Puede consultar su
+                  caso con el código, más abajo.
+                </p>
+              )}
+
               <div className="acciones-confirmacion">
                 <a
                   className="boton-compartir"

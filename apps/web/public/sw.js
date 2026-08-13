@@ -205,3 +205,71 @@ async function drenarBandeja() {
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Notificaciones push
+// ---------------------------------------------------------------------------
+// Es lo que cierra el ciclo para quien reportó. Sin esto, un ciudadano manda su
+// reporte y no vuelve a saber nada: ni cuando un equipo lo toma, ni cuando
+// llega, ni cuando lo cierran.
+//
+// El contenido llega cifrado de extremo a extremo, pero **el texto no dice qué
+// ocurrió ni dónde**: una notificación se ve en la pantalla bloqueada, y quien
+// pase al lado del teléfono no tiene por qué enterarse de que en tal casa hay
+// gente atrapada.
+
+self.addEventListener('push', (evento) => {
+  let datos = {};
+  try {
+    datos = evento.data ? evento.data.json() : {};
+  } catch {
+    // Una carga que no es JSON no debe impedir que se muestre algo: la persona
+    // igual quiere saber que su caso se movió.
+  }
+
+  const titulo = datos.titulo || 'Su reporte se actualizó';
+  const cuerpo = datos.cuerpo || 'Toque para ver el estado de su caso.';
+
+  evento.waitUntil(
+    self.registration.showNotification(titulo, {
+      body: cuerpo,
+      icon: '/icono.svg',
+      badge: '/icono.svg',
+      // Agrupa por caso: tres cambios seguidos no dejan tres notificaciones
+      // apiladas, sino la última. En una emergencia, una lista de avisos
+      // repetidos es ruido.
+      tag: datos.codigo ? `reporte-${datos.codigo}` : 'reporte',
+      renotify: true,
+      data: { codigo: datos.codigo || null },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (evento) => {
+  evento.notification.close();
+  const codigo = evento.notification.data?.codigo;
+
+  evento.waitUntil(
+    (async () => {
+      const clientes = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+
+      // Si la app ya está abierta se reutiliza esa pestaña en vez de abrir otra:
+      // llenarle el teléfono de pestañas a alguien que está en una emergencia es
+      // exactamente lo contrario de ayudar.
+      for (const cliente of clientes) {
+        if (cliente.url.includes(self.location.origin)) {
+          cliente.postMessage({ tipo: 'consultar-caso', codigo });
+          return cliente.focus();
+        }
+      }
+
+      const destino = codigo
+        ? `/?vista=reportar&codigo=${encodeURIComponent(codigo)}`
+        : '/?vista=reportar';
+      return self.clients.openWindow(destino);
+    })(),
+  );
+});

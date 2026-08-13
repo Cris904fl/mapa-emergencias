@@ -6,6 +6,7 @@ import { construirApp } from '../src/app.ts';
 import { bd } from '../src/db/pool.ts';
 import { config } from '../src/config.ts';
 import { almacen } from '../src/servicios/almacen.ts';
+import { notificarCambioDeEstado } from '../src/servicios/notificaciones.ts';
 import { colasHabilitadas, encolarTriage } from '../src/trabajadores/colas.ts';
 import {
   asegurarBaseDePruebas,
@@ -451,5 +452,42 @@ describe('almacenamiento de medios', () => {
 
   it('rechaza una llave que se sale del directorio del almacén', async () => {
     await assert.rejects(() => almacen.leer('../../../etc/passwd'));
+  });
+});
+
+describe('notificaciones a quien reportó', () => {
+  /**
+   * La regla que estas pruebas fijan: **avisar nunca puede tumbar la acción que
+   * provocó el aviso**. Un equipo que marca «llegué al sitio» no puede recibir
+   * un error porque el teléfono de otra persona ya no existe.
+   */
+  it('no falla cuando las notificaciones no están configuradas', async () => {
+    const reporte = await crearReporteDirecto({ lat: 4.61, lng: -74.08 });
+    // Sin claves VAPID devuelve null en vez de lanzar: la función está apagada.
+    assert.equal(await notificarCambioDeEstado(reporte, 'ASIGNADO'), null);
+  });
+
+  it('la suscripción exige un código de reporte que exista', async () => {
+    const respuesta = await app.inject({
+      method: 'POST',
+      url: '/v1/notificaciones/suscribir',
+      payload: {
+        codigo: 'RPT-NOEXISTE',
+        endpoint: 'https://push.example.org/abc',
+        claves: { p256dh: 'x'.repeat(40), auth: 'y'.repeat(20) },
+      },
+    });
+
+    // 400 sin claves configuradas, 404 con ellas: en ninguno de los dos casos
+    // se acepta una suscripción a un reporte inventado.
+    assert.ok([400, 404].includes(respuesta.statusCode), `fue ${respuesta.statusCode}`);
+  });
+
+  it('la clave pública se anuncia como deshabilitada si no está configurada', async () => {
+    const cuerpo = (
+      await app.inject({ method: 'GET', url: '/v1/notificaciones/clave-publica' })
+    ).json();
+    assert.equal(typeof cuerpo.habilitadas, 'boolean');
+    if (!cuerpo.habilitadas) assert.equal(cuerpo.clave, null);
   });
 });

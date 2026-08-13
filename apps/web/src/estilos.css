@@ -1760,3 +1760,22 @@ button.entrada-leyenda:focus-visible {
   font-size: 0.9rem;
   color: var(--tinta-suave);
 }
+
+/* Ofrecimiento de avisos push, dentro de la confirmación del reporte. */
+.ofrecer-avisos {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgb(15 23 42 / 10%);
+}
+
+.ofrecer-avisos p {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+.avisos-activos {
+  margin: 0.7rem 0 0;
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: var(--bien);
+}

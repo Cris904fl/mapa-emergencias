@@ -6,6 +6,7 @@ import { conflicto, noEncontrado, sinPermiso, solicitudInvalida } from '../lib/e
 import { validar } from '../lib/validar.ts';
 import { puedeOperar } from '../lib/auth.ts';
 import { refrescarPrioridad } from '../servicios/prioridad.ts';
+import { notificarCambioDeEstado } from '../servicios/notificaciones.ts';
 import { rutaHastaReporte } from '../servicios/ruteo.ts';
 
 /**
@@ -260,6 +261,11 @@ export async function rutasCampo(app: FastifyInstance): Promise<void> {
     }
 
     await refrescarPrioridad(peticion.params.id);
+
+    // Avisarle a quien reportó: es el momento en que 'mandé algo a un buzón' se
+    // convierte en 'alguien viene'. Nunca puede tumbar la acción de campo.
+    await notificarCambioDeEstado(peticion.params.id, 'ASIGNADO').catch(() => {});
+
     return { tomado: true, codigo_publico: resultado.codigo_publico, estado: resultado.estado };
   });
 
@@ -306,6 +312,11 @@ export async function rutasCampo(app: FastifyInstance): Promise<void> {
       throw conflicto('Hay que tomar el caso antes de marcarlo en atención');
     }
     await refrescarPrioridad(peticion.params.id);
+
+    // Avisarle a quien reportó: es el momento en que 'mandé algo a un buzón' se
+    // convierte en 'alguien viene'. Nunca puede tumbar la acción de campo.
+    await notificarCambioDeEstado(peticion.params.id, 'EN_ATENCION').catch(() => {});
+
     return { estado: 'EN_ATENCION' };
   });
 
@@ -372,6 +383,11 @@ export async function rutasCampo(app: FastifyInstance): Promise<void> {
         'Solo puede cerrar el caso quien lo tomó, y solo si sigue abierto',
       );
     }
+
+
+    // Avisarle a quien reportó: es el momento en que 'mandé algo a un buzón' se
+    // convierte en 'alguien viene'. Nunca puede tumbar la acción de campo.
+    await notificarCambioDeEstado(peticion.params.id, 'RESUELTO').catch(() => {});
 
     return { estado: 'RESUELTO', nota };
   });

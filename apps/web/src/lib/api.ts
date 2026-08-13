@@ -308,6 +308,21 @@ export const api = {
 
   recursosGeoJson: () => pedir<ColeccionGeoJson>('/v1/recursos'),
 
+  // ---- Notificaciones ----
+
+  clavePublicaNotificaciones: () =>
+    pedir<{ habilitadas: boolean; clave: string | null }>('/v1/notificaciones/clave-publica'),
+
+  suscribirNotificaciones: (cuerpo: {
+    codigo: string;
+    endpoint: string;
+    claves: { p256dh: string; auth: string };
+  }) =>
+    pedir<{ suscrito: boolean }>('/v1/notificaciones/suscribir', {
+      method: 'POST',
+      body: JSON.stringify(cuerpo),
+    }),
+
   /**
    * Consulta de un caso por su código público.
    *

@@ -26,6 +26,7 @@ import { calcularPrioridad, pesosVigentes, refrescarPrioridad } from '../servici
 import { triarReporteConIa } from '../servicios/triage.ts';
 import { encolarTriage, encolarEtiquetadoImagen } from '../trabajadores/colas.ts';
 import { almacen } from '../servicios/almacen.ts';
+import { notificarCambioDeEstado } from '../servicios/notificaciones.ts';
 
 export async function rutasReportes(app: FastifyInstance): Promise<void> {
   /**
@@ -160,6 +161,15 @@ export async function rutasReportes(app: FastifyInstance): Promise<void> {
     try {
       const reporte = await cambiarEstado(peticion.params.id, cambio, peticion.sesion!.usuarioId);
       await refrescarPrioridad(peticion.params.id);
+
+      // Avisarle a quien reportó. Va con `catch` y sin `await` bloqueante sobre
+      // el resultado: que falle una notificación no puede tumbar el cambio de
+      // estado que la provocó. Un operador que marca un caso resuelto no puede
+      // recibir un error porque el teléfono de otra persona ya no existe.
+      await notificarCambioDeEstado(peticion.params.id, cambio.estado).catch((error) => {
+        peticion.log.warn({ error, reporteId: peticion.params.id }, 'No se pudo notificar');
+      });
+
       return reporte;
     } catch (error) {
       if (esErrorPg(error, CODIGOS_PG.VIOLACION_LLAVE_FORANEA)) {
