@@ -64,6 +64,16 @@ import pg from 'pg';
 const RAIZ = 'https://portalgis.dane.gov.co/mparcgis/rest/services/Hosted';
 
 /**
+ * IDECA, la infraestructura de datos espaciales del Distrito Capital.
+ *
+ * El DANE no parte Bogotá: su municipio 11001 es un solo polígono de siete
+ * millones de habitantes, y un reporte que resuelva a «BOGOTÁ, D.C.» no le dice
+ * a nadie a dónde ir. Las localidades las publica el catastro distrital, y son
+ * las que convierten eso en «KENNEDY» o «CIUDAD BOLÍVAR».
+ */
+const RAIZ_IDECA = 'https://serviciosgis.catastrobogota.gov.co/arcgis/rest/services';
+
+/**
  * Los dos niveles que se cargan, en orden: el padre antes que el hijo.
  *
  * `portalgis.dane.gov.co` y no `geoportal.dane.gov.co`: el segundo es el que
@@ -74,6 +84,7 @@ const RAIZ = 'https://portalgis.dane.gov.co/mparcgis/rest/services/Hosted';
 const NIVELES = [
   {
     tipo: 'DEPARTAMENTO',
+    raiz: RAIZ,
     servicio: 'Serv_Dpto_MGN_2025/FeatureServer/319',
     campoCodigo: 'dpto_ccdgo',
     campoNombre: 'dpto_cnmbre',
@@ -82,12 +93,38 @@ const NIVELES = [
   },
   {
     tipo: 'MUNICIPIO',
+    raiz: RAIZ,
     servicio: 'Serv_Mpio_MGN_2025/FeatureServer/317',
     campoCodigo: 'mpio_cdpmp',
     campoNombre: 'mpio_cnmbre',
     /** El código de departamento, para colgar el municipio de su padre. */
     campoPadre: 'dpto_ccdgo',
     esperados: 1122,
+  },
+  {
+    tipo: 'LOCALIDAD',
+    raiz: RAIZ_IDECA,
+    servicio: 'ordenamientoterritorial/localidad/MapServer/0',
+    campoCodigo: 'LOCCODIGO',
+    campoNombre: 'LOCNOMBRE',
+    campoPadre: null,
+    /**
+     * Todas las localidades cuelgan del mismo municipio, así que el padre es una
+     * constante y no un campo del dato.
+     */
+    codigoPadreFijo: '11001',
+    /**
+     * Los códigos de IDECA van de «01» a «20», y sin prefijo chocarían con
+     * los códigos DANE de departamento —«11» es Bogotá como departamento y
+     * también Teusaquillo como localidad—. El índice único de `lugares.codigo`
+     * es global, así que el prefijo no es cosmético: sin él la carga se comería
+     * filas o fallaría según el orden.
+     *
+     * `11001-01` se lee como «localidad 01 del municipio 11001» y no finge ser
+     * un código DIVIPOLA, que no lo es.
+     */
+    prefijoCodigo: '11001-',
+    esperados: 20,
   },
 ];
 
@@ -126,8 +163,25 @@ const conDepartamentos = argumentos.includes('--con-departamentos');
  * `lugar_id` no alimenta el índice de prioridad ni ninguna decisión— pero
  * «inocuo» lo decide quien administra el despliegue, no este script.
  */
+/**
+ * Recalcular la zona de **todos** los reportes, no solo de los que no tienen.
+ *
+ * Hace falta al agregar un nivel más fino. El trigger resuelve la zona al
+ * insertar y al mover el punto, así que un reporte que ya se resolvió al
+ * municipio se queda ahí para siempre: cargar las localidades de Bogotá no
+ * movería ni uno de los que ya están, y el panel de zonas mostraría los viejos
+ * agrupados por municipio y los nuevos por localidad. Dos niveles mezclados en
+ * la misma tabla es peor que un nivel grueso.
+ *
+ * Sobrescribe `lugar_id` de reportes reales, y por eso va tras su propia
+ * bandera. Es dato derivado —se recalcula con la misma regla del trigger, y no
+ * alimenta el índice de prioridad ni ninguna decisión— pero sobrescribir es
+ * sobrescribir.
+ */
+const reasignarZonas = argumentos.includes('--reasignar-zonas');
+
 const soloZonas = argumentos.includes('--solo-zonas');
-const asignarZonas = soloZonas || argumentos.includes('--asignar-zonas');
+const asignarZonas = soloZonas || reasignarZonas || argumentos.includes('--asignar-zonas');
 
 /**
  * Cargar solo la población, sin volver a bajar la geometría.
@@ -146,6 +200,19 @@ const soloPoblacion = argumentos.includes('--solo-poblacion');
  * útil el panel de «Zonas» y el único que resuelve sin ambigüedad (ver la nota
  * de la cabecera sobre Bogotá).
  */
+/**
+ * Las localidades de Bogotá, tras una bandera.
+ *
+ * No van por omisión porque cambian a dónde resuelven los reportes de Bogotá: al
+ * ser más pequeñas que el municipio, le ganan en el trigger. Eso es lo que se
+ * quiere —«KENNEDY» sirve para despachar y «BOGOTÁ, D.C.» no— pero mientras las
+ * localidades no tengan población, la columna de reportes por habitante del panel
+ * de zonas se queda en blanco para toda Bogotá. Cargarlas sin población es
+ * cambiar precisión de nombre por pérdida de denominador, y esa es una decisión
+ * de quien despliega, no un valor por omisión.
+ */
+const conLocalidades = argumentos.includes('--con-localidades');
+
 const aCargar =
   soloZonas || soloPoblacion
     ? // Ni `--solo-zonas` ni `--solo-poblacion` bajan geometría. Son operaciones
@@ -153,9 +220,12 @@ const aCargar =
       // un UPDATE — y a exponerse a que la descarga falle en algo que no la
       // necesita.
       []
-    : conDepartamentos
-      ? NIVELES
-      : NIVELES.filter((n) => n.tipo === 'MUNICIPIO');
+    : NIVELES.filter(
+        (n) =>
+          n.tipo === 'MUNICIPIO' ||
+          (n.tipo === 'DEPARTAMENTO' && conDepartamentos) ||
+          (n.tipo === 'LOCALIDAD' && conLocalidades),
+      );
 
 /** La población se carga siempre, salvo cuando se pidió expresamente otra cosa. */
 const conPoblacion = soloPoblacion || !soloZonas;
@@ -237,7 +307,7 @@ async function pedirPagina(nivel, desde) {
     f: 'geojson',
   });
 
-  const respuesta = await fetch(`${RAIZ}/${nivel.servicio}/query?${parametros}`, {
+  const respuesta = await fetch(`${nivel.raiz}/${nivel.servicio}/query?${parametros}`, {
     signal: AbortSignal.timeout(LIMITE_MS),
   });
   if (!respuesta.ok) {
@@ -518,7 +588,7 @@ try {
         parametros.push(
           e.properties[nivel.campoNombre].trim(),
           nivel.tipo,
-          e.properties[nivel.campoCodigo],
+          (nivel.prefijoCodigo ?? '') + e.properties[nivel.campoCodigo],
           JSON.stringify(e.geometry),
         );
       });
@@ -544,7 +614,34 @@ try {
 
     // Los padres se cuelgan después de insertar el nivel, en una sola consulta:
     // así el INSERT no necesita saber en qué orden llegaron las filas.
-    if (nivel.campoPadre && conDepartamentos) {
+    /**
+     * El padre puede venir de un campo del dato —el departamento de cada
+     * municipio— o ser una constante, como el municipio de todas las localidades.
+     *
+     * En el segundo caso el id se busca en la base y no en `idPorCodigo`: el
+     * padre pudo haberse cargado en una corrida anterior, que es justo lo que
+     * pasa al agregar localidades sobre municipios ya cargados.
+     */
+    if (nivel.codigoPadreFijo) {
+      const { rows } = await cliente.query('SELECT id FROM lugares WHERE codigo = $1', [
+        nivel.codigoPadreFijo,
+      ]);
+      const idPadre = rows[0]?.id;
+
+      if (!idPadre) {
+        console.log(
+          `  ${nivel.tipo}: sin padre — no hay ningún lugar con código ${nivel.codigoPadreFijo}.` +
+            '\n    Cargue primero los municipios; quedan colgadas de nada, no roto.',
+        );
+      } else {
+        const { rowCount } = await cliente.query(
+          `UPDATE lugares SET padre_id = $1
+            WHERE tipo = $2::tipo_lugar AND padre_id IS DISTINCT FROM $1`,
+          [idPadre, nivel.tipo],
+        );
+        console.log(`  ${nivel.tipo}: ${rowCount} colgadas del código ${nivel.codigoPadreFijo}`);
+      }
+    } else if (nivel.campoPadre && conDepartamentos) {
       const codigos = [];
       const padres = [];
       for (const e of entidades) {
@@ -605,8 +702,16 @@ try {
     `SELECT count(*)::int AS n FROM reportes WHERE lugar_id IS NULL`,
   );
 
-  if (pendientes[0].n === 0) {
+  if (pendientes[0].n === 0 && !reasignarZonas) {
     console.log('\nTodos los reportes tienen zona.');
+    if (aCargar.some((n) => n.tipo === 'LOCALIDAD')) {
+      // Se dice justo acá porque es el momento en que alguien acaba de cargar un
+      // nivel más fino y va a creer que ya está aplicado.
+      console.log(
+        'Los que ya tenían zona siguen en la que se les resolvió: el trigger no mira atrás.' +
+          '\nPara recalcularlos con los niveles que hay ahora: --reasignar-zonas',
+      );
+    }
   } else if (!asignarZonas) {
     console.log(
       `\n${pendientes[0].n} reporte(s) ya existentes siguen sin zona: el trigger la resuelve` +
@@ -629,8 +734,16 @@ try {
                  WHERE ST_Intersects(l.geom, r.geom)
                  ORDER BY ST_Area(l.geom) ASC
                  LIMIT 1)
-        WHERE r.lugar_id IS NULL
-          AND EXISTS (SELECT 1 FROM lugares l WHERE ST_Intersects(l.geom, r.geom))`,
+        WHERE ${reasignarZonas ? 'true' : 'r.lugar_id IS NULL'}
+          AND EXISTS (SELECT 1 FROM lugares l WHERE ST_Intersects(l.geom, r.geom))
+          -- Sin esto, recalcular escribiría en cada reporte aunque el resultado
+          -- fuera el mismo, y el conteo mentiría sobre cuántos se movieron.
+          AND r.lugar_id IS DISTINCT FROM (
+                SELECT l.id
+                  FROM lugares l
+                 WHERE ST_Intersects(l.geom, r.geom)
+                 ORDER BY ST_Area(l.geom) ASC
+                 LIMIT 1)`,
       [],
     );
 
@@ -638,7 +751,11 @@ try {
       `SELECT count(*)::int AS n FROM reportes WHERE lugar_id IS NULL`,
     );
 
-    console.log(`\nZonas asignadas a ${rowCount} reporte(s) que no la tenían.`);
+    console.log(
+      reasignarZonas
+        ? `\nZona recalculada: ${rowCount} reporte(s) cambiaron de zona.`
+        : `\nZonas asignadas a ${rowCount} reporte(s) que no la tenían.`,
+    );
     if (restantes[0].n > 0) {
       // Un reporte fuera de todo polígono: coordenadas en el mar, o en una
       // rendija que dejó la generalización. Se dice cuántos, porque cero y tres
