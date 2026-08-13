@@ -1,8 +1,14 @@
 # HANDOFF — Mapa inteligente de afectaciones
 
-Estado del repositorio en el commit **`efa74d8`** (rama `main`, sincronizada con
+Estado del repositorio en el commit **`e6bc92f`** (rama `main`, sincronizada con
 `origin/main`). Documento escrito inspeccionando el código y la base de datos en
 ejecución, no de memoria.
+
+> **El sistema está desplegado y en uso.** Desde el 13 de agosto de 2026 hay una
+> beta pública recibiendo reportes de personas reales. Las direcciones y el
+> estado del despliegue están en la §14; lo que dice este documento sobre
+> «pendiente» o «sin verificar» se refiere a esa instalación, no a un entorno
+> hipotético.
 
 Convención de este documento:
 
@@ -38,9 +44,10 @@ quién hizo qué.
 | **Atender** | rescatista en campo | sí |
 | **Tablero** | operador de sala de crisis | solo para actuar; consultar es abierto |
 
-**Alcance actual.** Un despliegue funcional de un solo evento, con geografía de
-prueba sobre coordenadas de Bogotá. No hay multi-tenancy, ni federación entre
-entidades, ni datos reales de DIVIPOLA.
+**Alcance actual.** Un despliegue de un solo evento, **público y en uso** desde
+el 13 de agosto de 2026. No hay multi-tenancy, ni federación entre entidades, ni
+geografía de DIVIPOLA (la tabla `lugares` está vacía en producción). Sí hay
+3 388 recursos de emergencia de todo el país.
 
 ---
 
@@ -50,9 +57,15 @@ entidades, ni datos reales de DIVIPOLA.
 
 | Pieza | Verificación |
 |---|---|
-| Esquema PostGIS: 9 tablas de dominio, 10 ENUM, 4 vistas, 12 triggers | 7 migraciones aplicadas contra PostGIS 3.5.2 |
-| Índice de prioridad con pesos versionados y desglose explicable | 11 pruebas |
-| API Fastify: 34 endpoints | 48 pruebas |
+| Esquema PostGIS: 10 tablas de dominio, 11 ENUM, 4 vistas, 12 triggers | 11 migraciones, aplicadas en local (PostGIS 3.5.2) y en Supabase (3.3.7) |
+| Índice de prioridad con pesos versionados y desglose explicable | 11 pruebas · **los 5 términos activos en producción** |
+| API Fastify: 36 endpoints | 76 pruebas |
+| **Despliegue completo en producción** | Cloudflare Workers + Render + Supabase, verificado de punta a punta (§14) |
+| **Consulta de un caso por su código público** | verificada contra reportes reales |
+| **Notificaciones push a quien reportó** | recibida en un dispositivo real |
+| **Medios en Supabase Storage** | subida y descarga con SHA-256 idéntico |
+| **3 388 recursos de emergencia de todo Colombia** | cargados desde OpenStreetMap |
+| Cron: despierta la API y refresca prioridades cada 10 min | observado refrescando solo |
 | PWA offline-first (IndexedDB + service worker + reintentos) | ciclo completo verificado en navegador |
 | Tablero GIS: MapLibre, DBSCAN, zonas, cola, filtros por KPI | verificado en navegador |
 | Atención en campo: tomar / llegar / cerrar, candado de concurrencia | 17 pruebas + navegador |
@@ -78,15 +91,17 @@ entidades, ni datos reales de DIVIPOLA.
 - **Background Sync del service worker.** El código existe. Se verificó la
   sincronización al recargar la página; ⚠️ **no se verificó el caso de pestaña
   cerrada**, que es el único que Background Sync aporta de más.
-- **Almacenamiento de medios.** Funciona en disco local con deduplicación por
-  SHA-256. No hay S3/MinIO.
 
 ### ⬜ Pendiente
 
-- Geografía real de DIVIPOLA en `lugares` (hoy: un municipio y dos barrios de
-  prueba).
+- **Geografía de `lugares`: vacía en producción.** No se sembró a propósito (los
+  datos de desarrollo son dos barrios de Bogotá y aparecerían como reales), pero
+  eso deja **el panel de «Zonas» del tablero sin nada** y ningún reporte resuelve
+  su zona por contención espacial. Es el hueco más visible del despliegue.
 - Proveedor propio de teselas (hoy: OpenStreetMap, cuya política **no permite
-  producción**).
+  producción**). Menos urgente de lo que parece: desde que el bundle está
+  partido, **el ciudadano no carga el mapa** — las teselas solo las pide el
+  tablero y la vista de campo.
 - Término propio en el índice para las asignaciones estancadas. Hoy hay alerta
   (mosaico «asignados sin llegada»), pero el reporte sigue sin volver a subir en
   la cola: eso exige repartir de nuevo los cinco pesos y volver a medir.
@@ -96,16 +111,20 @@ entidades, ni datos reales de DIVIPOLA.
 
 ### Qué funciona ahora mismo
 
-Con los servicios levantados: se reporta desde el navegador (con o sin red), se
-ve en el tablero ordenado por prioridad con su desglose, se filtra por cualquier
-KPI, un rescatista entra, ve los casos cerca, calcula la ruta con las vías
-bloqueadas, toma el caso, marca que llegó y lo cierra con nota. Todo queda en la
-bitácora con actor.
+**En producción, con gente real.** Alguien abre la dirección desde su celular,
+reporta (con o sin red), recibe un código y puede pedir que le avisen cuando su
+caso avance. El reporte entra a la cola ordenado por los cinco términos del
+índice, con su desglose. Un operador filtra por KPI y por severidad, toca un
+reporte y el mapa vuela hasta el sitio. Un rescatista entra, ve los casos cerca,
+calcula la ruta con las vías bloqueadas, toma el caso, marca que llegó y lo
+cierra con nota — y a quien reportó le llega una notificación en cada paso. Todo
+queda en la bitácora con actor.
 
 ### Bugs conocidos
 
-Ninguno abierto y reproducible. Los dos defectos encontrados durante el
-desarrollo se corrigieron y quedaron con prueba de regresión (ver §9).
+Ninguno abierto y reproducible. Durante el despliegue aparecieron **seis
+defectos**, todos corregidos y con prueba de regresión donde aplicaba (§9). El
+más grave: el primer reporte real habría tumbado el servicio.
 
 ---
 
@@ -213,29 +232,37 @@ Tablero GIS (operador)          Campo (rescatista)
 db/
   migrations/   001_extensiones · 002_tipos · 003_tablas · 004_indices
                 005_prioridad · 006_triggers · 007_campo · 008_llegada
-  seeds/        001_desarrollo.sql        (UUID fijos, idempotente)
+                009_recursos_nombre_unico · 010_notificaciones · 011_recursos_fuente
+  seeds/        001_desarrollo.sql        (UUID fijos, idempotente; NO se corre en producción)
   queries/      consultas-ejemplo.sql    (8 consultas PostGIS ejecutables)
                 tiempos-de-llegada.sql   (calibración del umbral de estancados)
+  recursos-colombia.json                 (3 374 recursos de OSM, cargados)
+  recursos.ejemplo.json                  (plantilla para agregar a mano)
 apps/api/src/
   config.ts             configuración validada con Zod
   app.ts                construcción de Fastify, plugins, manejo de errores
   servidor.ts           arranque y apagado ordenado
-  db/                   pool, migrar, sembrar, hash-clave
+  db/                   pool, migrar, sembrar, hash-clave (crea operadores)
   esquemas/             dominio.ts (ENUM espejo) · reporte.ts (entrada) · filtros.ts (KPI)
   lib/                  auth (scrypt) · errores · validar
   repositorios/         reportes.ts (SQL + GeoJSON)
-  rutas/                reportes · recursos · tablero · campo · sesion · salud
-  servicios/            prioridad · triage · ruteo · ia/{proveedores,extractor,imagen,cliente}
+  rutas/                reportes · recursos · tablero · campo · sesion · salud · notificaciones
+  servicios/            prioridad · triage · ruteo · almacen · notificaciones · ia/{…}
   trabajadores/         colas.ts (BullMQ) · index.ts (proceso aparte)
-apps/api/test/          ayudas.ts + 4 archivos de prueba (59 pruebas)
+apps/api/test/          ayudas.ts + 4 archivos de prueba (76 pruebas)
 apps/web/src/
-  lib/                  bd.ts (IndexedDB) · bandeja.ts (sincronización) · api.ts · geo.ts · imagen.ts
+  lib/                  bd.ts (IndexedDB) · bandeja.ts · api.ts · geo.ts · imagen.ts
+                        frescura.ts (umbrales compartidos) · notificaciones.ts (push)
   paginas/              Reportar.tsx · Campo.tsx · Tablero.tsx
-  componentes/          Mapa.tsx · Acceso.tsx
+  componentes/          Mapa.tsx · Acceso.tsx · ConsultarCaso.tsx
   App.tsx, main.tsx, estilos.css
-apps/web/public/        sw.js · manifest.webmanifest · icono.svg
-docs/                   prioridad · offline · ia-local · campo · despliegue-gratuito · HANDOFF
-scripts/                esperar-bd.mjs
+apps/web/public/        sw.js (armazón + Background Sync + push) · manifest · icono
+worker/index.js         Worker de Cloudflare: sirve la PWA, reenvía /v1, cron
+wrangler.jsonc          configuración del Worker (assets, vars, triggers)
+docs/                   prioridad · offline · ia-local · campo · despliegue-gratuito
+                        HANDOFF · presentacion/index.html (página para compartir)
+scripts/                esperar-bd · cargar-recursos · probar-conexion
+                        fijar-clave-bd · probar-notificacion
 ```
 
 ### Backend
@@ -292,8 +319,22 @@ bien formado, no valores con sentido.
 
 ### Almacenamiento
 
-Medios en disco (`ALMACEN_MEDIOS`), repartidos en subdirectorios por los dos
-primeros bytes del SHA-256, con deduplicación por `(reporte_id, sha256)`.
+Dos implementaciones detrás de una misma interfaz (`servicios/almacen.ts`),
+elegidas **por presencia de credenciales** y no por una bandera de modo: una
+variable que diga «usar Supabase» sin las claves puestas sería una forma de
+fallar en producción y no en desarrollo, que es la peor.
+
+- **Disco** (`ALMACEN_MEDIOS`) — en desarrollo y en servidores con disco propio.
+- **Supabase Storage** — lo que corre en producción. Hace falta en cualquier
+  hospedaje con disco efímero: en la capa gratuita de Render el sistema de
+  archivos se borra en cada redespliegue **y cada vez que la instancia hiberna**,
+  así que las fotos se perdían solas y **en silencio** (la subida respondía 201).
+
+La llave es la misma en ambos: `medios_reporte.llave_almacen` siempre fue una
+llave derivada del SHA-256, repartida en subdirectorios por sus dos primeros
+bytes, no una ruta de archivo. Por eso migrar no tocó el esquema.
+
+`/listo` informa cuál está activo y avisa cuando el disco es efímero.
 
 ### Flujo de datos del reporte
 
@@ -314,15 +355,16 @@ primeros bytes del SHA-256, con deduplicación por `(reporte_id, sha256)`.
 `postgis 3.5.2`, `pgcrypto 1.3` (gen_random_uuid), `pg_trgm 1.6` (similitud),
 `citext 1.6` (correos), `unaccent 1.1`, `plpgsql`.
 
-### Tablas (9 de dominio + control)
+### Tablas (10 de dominio + control)
 
 | Tabla | Propósito | Notas clave |
 |---|---|---|
 | `organizaciones` | entidades que atienden | nombre único (lower) |
 | `usuarios` | personal y ciudadanos | `hash_clave` NULL para ciudadanos; `ultima_posicion` + `posicion_en` (007) |
-| `lugares` | geografía administrativa | jerárquica (`padre_id`), `geom` MultiPolygon, `centroide` GENERATED |
-| `recursos` | capacidad con ubicación | `movil` para ambulancias/equipos; capacidad total/usada |
-| `reportes` | **tabla central**, 33 columnas | ver abajo |
+| `lugares` | geografía administrativa | jerárquica (`padre_id`), `geom` MultiPolygon, `centroide` GENERATED. **Vacía en producción** |
+| `recursos` | capacidad con ubicación | `movil` para ambulancias/equipos; `fuente` + `fuente_id` para reconciliar importaciones (011) |
+| `suscripciones_push` | avisos a quien reportó | atada al **reporte**, no a un usuario: el ciudadano no tiene cuenta (010) |
+| `reportes` | **tabla central**, 35 columnas | ver abajo |
 | `medios_reporte` | fotos/video/audio | `sha256` con CHECK de formato, único por reporte |
 | `extracciones_ia` | propuestas del modelo | se guarda **siempre**, aplicada o no |
 | `historial_estado_reporte` | bitácora | la llena un trigger, no la aplicación |
@@ -344,8 +386,15 @@ primeros bytes del SHA-256, con deduplicación por `(reporte_id, sha256)`.
   su desglose.
 - `responsable_id` + `tomado_en` (007) — **quién** tomó el caso en campo, distinto
   de `organizacion_asignada_id`.
+- `llegada_en` + `llegada_origen` (008) — cuándo llegó el equipo al sitio y **cómo
+  se supo**: `MARCADA` la selló el trigger al pasar a `EN_ATENCION` (es una
+  medición), `DECLARADA` la escribió el rescatista al cerrar (es un recuerdo).
+  `NULL` significa **no se sabe**, que es distinto de cero. Es la misma decisión
+  que ya tomó `origen_triage`: un número que se va a usar para decidir tiene que
+  decir de dónde salió.
 - CHECKs: conteos no negativos, `DUPLICADO` exige `duplicado_de_id`, `RESUELTO`
-  exige `resuelto_en`, `responsable_id` exige `tomado_en`.
+  exige `resuelto_en`, `responsable_id` exige `tomado_en`, la llegada va completa
+  (hora y procedencia) y nunca antes de `primera_respuesta_en`.
 
 ### Índices (39 en total)
 
@@ -402,7 +451,7 @@ fija con `SET LOCAL` por transacción (`enTransaccion(..., { usuarioId })`).
 
 ## 6. API
 
-34 endpoints. **Auth**: `—` abierto · `OP` exige `puedeOperar` (OPERADOR /
+36 endpoints. **Auth**: `—` abierto · `OP` exige `puedeOperar` (OPERADOR /
 RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartido.
 
 ### Salud
@@ -469,6 +518,13 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | POST | `/v1/campo/casos/:id/resolver` | cierra. `{nota, personas_atendidas}`. Solo quien lo tomó |
 | GET | `/v1/campo/personal` | personal con posición conocida + antigüedad del dato. Lo dibuja el mapa del tablero |
 
+### Notificaciones
+
+| Método | Ruta | Auth | Propósito |
+|---|---|---|---|
+| GET | `/v1/notificaciones/clave-publica` | — | clave VAPID para que la PWA se suscriba. Se sirve desde la API y no se incrusta en el bundle, para que cambiarla no exija reconstruir |
+| POST | `/v1/notificaciones/suscribir` | — | ata un dispositivo a un reporte. Abierta sin cuenta, igual que el alta: lo que la protege es que hay que conocer el **código público** |
+
 ### Transversal
 
 - Límite de tasa: **120 peticiones/minuto** por IP, `/salud` y `/listo` exentos.
@@ -519,6 +575,16 @@ RESPONDIENTE / ADMIN) · `TOK` requiere token válido · `SEC` secreto compartid
 | 6 candados sobre lo que la IA puede escribir | ✅ 11 pruebas |
 | Etiquetado de fotos | 🟡 sin ejecutar |
 | Cola BullMQ para IA | 🟡 el trabajador arranca; no se vio procesar un trabajo de triage |
+| **Consulta de un caso por código público** | ✅ estados en lenguaje de persona + bitácora |
+| **Aviso cuando el GPS es impreciso** (>150 m) | ✅ no bloquea el envío |
+| **Compartir el código por WhatsApp** | ✅ |
+| **Notificaciones push a quien reportó** | ✅ recibida en un dispositivo real |
+| **Medios en almacenamiento de objetos** | ✅ SHA-256 idéntico al subir y bajar |
+| **Tocar un reporte de la cola lleva el mapa al sitio** | ✅ |
+| **Recursos importables desde archivo, idempotente** | ✅ 3 388 cargados |
+| Hora de llegada al sitio con su procedencia | ✅ 6 pruebas |
+| Alerta de asignaciones estancadas | ✅ 2 pruebas |
+| Filtro por severidad desde la leyenda del mapa | ✅ 2 pruebas |
 
 ---
 
@@ -622,6 +688,42 @@ en **`.parsed_output`** (el propio JSDoc del SDK dice `.parsed`, que no existe e
 los tipos). No hay `output_config.effort`. **Verificar `node_modules` antes de
 escribir contra este SDK.**
 
+### Recibir un reporte no puede depender de nada opcional
+
+Es la regla que resume el defecto más grave del despliegue. La cola de IA, las
+notificaciones, el almacén de fotos y la extracción son comodidades; **el alta de
+un reporte no es negociable**. En concreto:
+
+- Si Redis no está, `encolarTriage` no encola y ya. Con `REDIS_URL` vacía ni lo
+  intenta, y si está configurado pero caído se rinde a los 2 segundos.
+- Si las notificaciones no están configuradas, `notificarCambioDeEstado` devuelve
+  `null` en vez de lanzar.
+- Notificar nunca puede tumbar la acción que lo provocó: un equipo que marca
+  «llegué al sitio» no puede recibir un error porque el teléfono de otra persona
+  ya no existe.
+
+Hay pruebas que fijan las tres.
+
+### El permiso de notificaciones se pide después de reportar, nunca al abrir
+
+Un navegador que pregunta «¿permitir notificaciones?» antes de que la persona
+sepa para qué sirve el sitio recibe un «no» casi siempre — y ese «no» se recuerda
+para siempre, no se puede volver a preguntar. Justo después de enviar el reporte
+es el único momento en que «¿le avisamos cuando alguien tome su caso?» tiene una
+respuesta obvia. Si ya lo negó antes, ni se ofrece.
+
+Y **el texto de la notificación no dice qué pasó ni dónde**: se ve en la pantalla
+bloqueada, y quien pase al lado del teléfono no tiene por qué enterarse de que en
+tal casa hay gente atrapada.
+
+### Un recurso se identifica por su origen, no por su nombre
+
+En Colombia hay 42 sitios llamados solo «Hospital» y 40 «Puesto de salud». El
+índice único por nombre de la migración 009 habría fundido 665 filas al cargar el
+país — dejando el mapa diciendo que no hay ayuda en decenas de municipios donde
+sí la hay. La 011 usa `fuente` + `fuente_id` (para OSM, `node/240954853`) y deja
+el nombre como clave solo para lo que se escribe a mano.
+
 ### Validación manual con Zod, no el proveedor de tipos de Fastify
 
 Para no acoplar todas las rutas a la compatibilidad entre dos dependencias que
@@ -640,15 +742,56 @@ subir en la cola**, porque eso exige un sexto término del índice y repartir de
 nuevo los cinco pesos. Con la alerta, el caso deja de ser invisible; sin el
 término, sigue dependiendo de que alguien mire. Razonamiento en `prioridad.md`.
 
+### Los seis defectos que apareció el despliegue
+
+Vale la pena conservarlos escritos: **ninguno se parecía a su causa**, y cuatro
+de los seis solo aparecen fuera de la máquina de desarrollo.
+
+1. **`--env-file` mata el proceso si el archivo no existe.** En un hospedaje no
+   hay `.env`. Los scripts usan `--env-file-if-exists`; `probar` conserva el
+   estricto a propósito.
+2. **El hospedaje inyecta `PORT`, no `API_PUERTO`.** Sin atenderlo, el proceso
+   arranca sin quejarse, escucha en 3010, y la plataforma enruta a otro puerto:
+   502 permanente **sin una sola línea de error**. `config.ts` le da prioridad a
+   `PORT`.
+3. **`hash-clave.ts` solo hacía UPDATE.** En una base limpia no había forma de
+   crear el primer operador — y crearlo por SQL tampoco, porque la tabla exige
+   que todo operador tenga organización. Ahora lo crea, y resuelve la
+   organización sin adivinar.
+4. **La base de pruebas nunca recibía migraciones nuevas.** `ayudas.ts` se
+   saltaba las migraciones si la tabla `reportes` ya existía, así que una
+   migración nueva no llegaba jamás a la suite: seguía verde contra un esquema
+   viejo. Ahora guarda la lista de archivos aplicados y reconstruye si cambió.
+5. **Un Redis ausente tumbaba el alta de reportes.** Dos fallos sumados:
+   `maxRetriesPerRequest: null` —que BullMQ exige— hace que `add()` no se
+   resuelva **ni se rechace**, así que el `await` de la ruta colgaba para
+   siempre; y la conexión de ioredis no tenía oyente de `error`, lo que convierte
+   cada intento fallido en excepción no capturada. **El primer reporte real
+   habría tumbado el servicio, y el reporte habría quedado guardado sin que el
+   ciudadano recibiera confirmación.** Se ve como «la app no funciona» cuando en
+   realidad sí guardaba.
+6. **El nombre no identifica un recurso.** El índice único de la migración 009
+   habría fundido 665 filas al cargar el país entero: hay 42 sitios llamados solo
+   «Hospital» y 40 «Puesto de salud». La 011 lo cambia por el identificador
+   estable de la fuente.
+
 ### Limitaciones aceptadas (documentadas)
 
-- **OSRM demo y teselas de OSM**: ninguna permite tráfico de producción.
+- **OSRM demo y teselas de OSM**: ninguna permite tráfico de producción. Ver §2
+  sobre por qué es menos urgente de lo que suena.
 - **El service worker sincroniza solo el texto**, no las fotos (multipart desde el
   SW suma complejidad; el reporte es lo que ordena un rescate).
 - **`v_cola_prioridad_vivo` y `?vivo=true`** hacen una llamada a función por fila.
   Exactos pero O(n); usar con filtros o volúmenes acotados.
-- **La geografía es de prueba** (un municipio, dos barrios de Bogotá).
-- **Medios en disco efímero**: se pierden en cada redespliegue.
+- **`lugares` está vacía en producción**, así que no hay resolución de zona ni
+  panel de zonas.
+- **Los recursos son de OpenStreetMap**: dato comunitario, sin verificar. Para el
+  término de aislamiento sirve —un error de 200 m no cambia una decisión— pero
+  `GET /v1/recursos/cercanos` sí se le podría mostrar a un rescatista, y ahí la
+  exigencia es otra. Cada registro lo dice en su campo `notas`.
+- **Un medio de antes del cambio a Supabase Storage quedó huérfano**: la fila
+  existe en `medios_reporte` y el archivo no. Es de cuando los medios iban al
+  disco efímero de Render.
 
 ### Sin verificar (⚠️)
 
@@ -658,6 +801,21 @@ término, sigue dependiendo de que alguien mire. Razonamiento en `prioridad.md`.
 - Proveedores `compatible` y `anthropic`.
 - Cualquier cosa con concurrencia real (varios rescatistas simultáneos en
   producción); el candado está probado con dos usuarios en la suite.
+- **Notificaciones push en iPhone.** Se verificó en Chrome de escritorio. En iOS
+  solo llegan si la persona agregó la app a la pantalla de inicio; en Safari a
+  secas no funcionan nunca. Es limitación de Apple, y conviene saberlo antes de
+  que alguien lo reporte como fallo.
+
+### Sobre la instancia gratuita de Render
+
+Medido durante el despliegue: **alrededor de una de cada tres peticiones falla en
+la capa de red** mientras la instancia despierta, con errores de TLS que no
+vienen de la aplicación. Para el ciudadano está cubierto por diseño —la PWA
+guarda el reporte antes de enviarlo y reintenta— pero para quien mira el tablero
+significa recargar de vez en cuando. **No es un fallo del código.**
+
+El cron cada 10 minutos existe justo para reducirlo, y el manejador del Worker
+reintenta una vez con pausa por la misma razón.
 
 ### Detalles menores
 
@@ -673,96 +831,126 @@ término, sigue dependiendo de que alguien mire. Razonamiento en `prioridad.md`.
 
 ## 10. ÚLTIMO TRABAJO REALIZADO
 
-Cuatro commits, todos en `origin/main`:
+**El 13 de agosto de 2026 el proyecto pasó de correr en una máquina a estar
+desplegado y recibiendo reportes de personas reales.** Dieciséis commits en un
+día. Lo relevante, agrupado:
 
-| Commit | Contenido |
+### El despliegue
+
+| Commit | Qué |
 |---|---|
-| `11073f2` | base completa: PostGIS, API, PWA offline-first, tablero (68 archivos) |
-| `854738d` | extracción con Ollama, capa de proveedores, guardas medidas (15 archivos) |
-| `3ceaaca` | atención en campo, ruta con vías bloqueadas, filtros por KPI (19 archivos) |
-| `efa74d8` | **último**: pantalla de login propia y sesión solo desde «Atender» (6 archivos) |
+| `1807b54` | que la aplicación pueda arrancar fuera de esta máquina (`--env-file-if-exists`, `PORT`) |
+| `801a5d4` | fijar Node 24 y poder crear el primer operador en una base limpia |
+| `4232941` | servir la PWA desde un Worker de Cloudflare que reenvía `/v1` a la API |
+| `a15fd5b` | versionar `API_ORIGEN` para que el despliegue no la borre |
+| `93be188` | cron que despierta la API y refresca prioridades cada 10 min |
 
-### Detalle del último commit (`efa74d8`)
+### Los arreglos que salieron de usarlo
 
-**Motivo:** el login era feo (dos campos con placeholder en una cajita) y estaba
-duplicado en el tablero.
+| Commit | Qué |
+|---|---|
+| `eac195c` | **que un Redis ausente no tumbe el alta de reportes** — el más grave |
+| `2771e49` | consultar caso por código, almacén de medios intercambiable, cargador de recursos |
+| `726ea99` | tocar un reporte lleva el mapa al sitio; la bandeja deja de ofrecer lo que ya hace sola |
+| `908cdb0` | notificaciones push a quien reportó |
+| `e6bc92f` | los 3 374 recursos de emergencia de Colombia desde OpenStreetMap |
 
-**Archivos modificados:**
+### Lo que se aprendió midiendo, no suponiendo
 
-- `apps/web/src/componentes/Acceso.tsx` — reescrito. Etiquetas `<label>` visibles
-  en vez de placeholders, botón mostrar/ocultar clave, error en bloque con
-  `role="alert"`, tarjeta centrada con ícono y descripción. Se **eliminó** la
-  variante `compacto` (quedó sin uso al sacar el login del tablero). Panel de
-  cuentas de prueba con autollenado, dentro de `import.meta.env.DEV`.
-- `apps/web/src/paginas/Tablero.tsx` — se quitó `<Acceso>`; `autenticado` pasó de
-  estado a `tieneSesion()` en render; nueva prop `onIrACampo`; aviso «modo
-  consulta» cuando no hay sesión.
-- `apps/web/src/paginas/Campo.tsx` — la pantalla de acceso ocupa la vista
-  completa.
-- `apps/web/src/App.tsx` — pasa `onIrACampo` al tablero.
-- `apps/web/src/estilos.css` — estilos de `.pantalla-acceso`, `.tarjeta-acceso`,
-  `.campo-acceso`, `.boton-ver`, `.cuentas-demo`, `.aviso-sesion`; se eliminaron
-  los de `.acceso-amplio`.
-- `docs/campo.md` — sección sobre dónde se abre la sesión.
+Tres cosas salieron de mirar datos reales y cambiaron decisiones:
 
-**Migraciones:** ninguna en este commit. La última fue `007_campo.sql` en
-`3ceaaca` (columnas `usuarios.ultima_posicion/posicion_precision_m/posicion_en`,
-`reportes.responsable_id/tomado_en`, índices, trigger `marca_tomado`, vista
-`v_casos_campo`).
+**El índice funcionaba a dos de cinco términos.** Con la base recién desplegada,
+`espera` estaba congelada en 0 —el refresco no corría, porque el secreto no había
+llegado al Worker— y `aislamiento` daba los 15 puntos completos a todos, porque
+no había ni un recurso cargado. Se veía ordenando bien y no lo estaba.
 
-**Comandos ejecutados:** `npx tsc --noEmit` en ambos paquetes,
-`node --test` (suite completa), `npx vite build`.
+**Un reporte del Caquetá parecía el más urgente y era un artefacto.** Salía a
+364 km del recurso más cercano; al cargar los recursos del país resultó tener un
+hospital a **1 411 m**. Su prioridad bajó de 48.42 a 37.65 y la cola se reordenó.
 
-**Pruebas realizadas y resultados:**
-
-- Suite: **59/59 pasando** (prioridad 11, reportes 20, triage 11, campo 17).
-- Typecheck: limpio en `apps/api` y `apps/web`.
-- Navegador: autollenado de cuenta demo, mostrar/ocultar clave, clave errada →
-  error con `role="alert"`, entrada correcta → pantalla de campo con 9 casos;
-  tablero con sesión sin aviso ni login; tablero sin sesión con aviso y botón que
-  navega a «Atender».
-- Build de producción: se comprobó que las cadenas del panel demo **no** quedan en
-  `dist/assets/*.js` (sí en el `.js.map`, por diseño).
-- Adicional en esta sesión: se verificó por primera vez que
-  `npm run trabajadores` arranca y que el refresco periódico funciona
-  (`{refrescados: 10}`).
-
----
+**No se puede calibrar el umbral de «asignados sin llegada».** Al medir la
+bitácora, 2 de cada 5 casos cerrados nunca pasaron por `EN_ATENCION`: el dato no
+se estaba recogiendo. **El instrumento estaba roto, no la muestra** — esperar más
+tiempo no lo habría arreglado. Eso llevó a la migración 008 —hora de llegada
+**con su procedencia**, `MARCADA` o `DECLARADA`— y a la pregunta al cerrar. El
+reloj de esa medición empieza ahí.
 
 ## 11. SIGUIENTE PASO
 
-**Esperar a que haya cobertura de horas de llegada. Mientras tanto, el etiquetado
-de fotos.**
+**Escuchar la beta. No construir nada grande todavía.**
 
-La deuda técnica con impacto real está en cero: el bundle está partido (entrada
-de **1 303 kB a 244 kB**, 77 kB gzip), `GET /v1/campo/personal` dibuja al personal
-con la antigüedad de su posición, las asignaciones estancadas tienen alerta, y la
-hora de llegada ya se recoge con su procedencia.
+El sistema está desplegado y recibiendo reportes reales desde el 13 de agosto.
+La deuda técnica con impacto real está en cero. Lo que falta ahora no se decide
+leyendo código: se decide viendo qué hace la gente con él.
 
-Se intentó calibrar el umbral de 30 minutos y **no se pudo**, por una razón que
-vale la pena no olvidar: el dato no se estaba recogiendo. 2 de cada 5 casos
-cerrados nunca pasaban por `EN_ATENCION`. Eso ya está corregido (migración 008 y
-la pregunta al cerrar), pero el reloj empieza desde ahí — hoy la cobertura es del
-43 % y son 3 datos, dos de ellos de 0.0 minutos porque salieron de clics
-seguidos en una sesión de pruebas.
+### La pregunta de fondo, que es de producto y no técnica
 
-Qué hacer, en orden:
+**Hoy el sistema supone que existe un coordinador mirando el tablero.** Y la
+propia beta ya dio evidencia en contra: los primeros cinco reportes reales
+entraron y **se quedaron en `RECIBIDO`** hasta que se movió uno a mano para
+probar las notificaciones. Nadie hizo triage. Nadie tomó un caso.
 
-1. **Dejar el umbral quieto** hasta que `db/queries/tiempos-de-llegada.sql`
-   reporte cobertura razonable sobre uso real. Moverlo ahora sería cambiar un
-   número inventado por otro.
-2. **Ajustar el umbral** con lo que salga, mirando la tabla de falsas alarmas de
-   esa consulta: un umbral que marca el 30 % de las llegadas normales no es una
-   alerta, es ruido que se aprende a ignorar.
-3. **Decidir el sexto término** (`tiempo_desde_asignacion`) con el dato en la
-   mano. Exige una fila nueva en `pesos_prioridad` con los cinco pesos
-   repartidos de nuevo para que sigan sumando 100, y volver a medir el orden
-   resultante — es el invariante más delicado del sistema, y por eso no se tocó
-   sin datos.
+Hay dos caminos y son distintos:
 
-**Mientras tanto**, lo que sí se puede hacer hoy: el etiquetado de fotos sigue
-sin ejecutarse nunca. Solo necesita `ollama pull gemma3:4b` y un `IA_MODELO` con
-visión.
+| Camino | Lo que implica |
+|---|---|
+| **Herramienta de triage** (lo que es hoy) | Necesita que una alcaldía, una junta o un cuerpo de socorro la adopte. Lo que falta no es código: es convencer a una institución. |
+| **Ayuda mutua** | Sirve sola desde el primer día. Pero deja de ser un sistema de coordinación y pasa a ser una plataforma de vecinos. |
+
+**Riesgo que hay que resolver antes de abrir el «tomar caso» a cualquiera:** un
+«voy para allá» falso es peor que nada — el reporte se ve atendido y nadie llega.
+Hoy eso no puede pasar porque solo entra personal autenticado y queda en la
+bitácora con nombre. Ese es justo el valor que se perdería.
+
+**Camino intermedio, si se quiere avanzar sin pivotar:** el tablero ya es público
+en modo consulta. Falta que quien reportó vea que alguien viene, y un rol de
+«respondiente» al que uno se **registra** —no anónimo— conservando la
+trazabilidad.
+
+**Recomendación: no decidirlo aún.** La beta lleva un día. Si en dos semanas
+nadie de una junta o de la Defensa Civil ha mirado el tablero, la respuesta ya
+estará dada.
+
+#### Un dato real, del mismo día
+
+Horas después de desplegar, a Cristian le llegó por WhatsApp un mensaje sobre
+**incendios forestales en zonas rurales de Ocaña, Norte de Santander**. Vale la
+pena conservar qué pedía, porque es evidencia directa para esta decisión:
+
+> «hacemos un llamado a las personas que tengan experiencia o conocimientos en el
+> manejo y control de este tipo de incendios para que puedan sumarse y brindar
+> apoyo en las labores de control y extinción»
+
+**No pedía que alguien reportara dónde hay fuego. Pedía voluntarios con
+experiencia.** Es decir: lo que circula de verdad en una emergencia colombiana se
+parece más a la mitad de ayuda mutua que a la de triage.
+
+Es un solo caso y no decide nada por sí mismo. Pero vale más que cualquier
+razonamiento de escritorio, y por eso queda escrito.
+
+(Ocaña quedó cubierta por la carga nacional de recursos: seis, cinco de ellos a
+menos de 730 m del centro. Si entra un reporte de allá, el índice ya lo ordena
+bien.)
+
+### Lo demás, que sí es concreto
+
+**Sembrar `lugares`.** Es el hueco más visible: sin geografía no hay resolución
+de zona y el panel de «Zonas» del tablero está vacío. Hace falta DIVIPOLA real,
+no los dos barrios de prueba.
+
+**El umbral de «asignados sin llegada» sigue sin poder calibrarse.** La cobertura
+de horas de llegada era del 43 % con 3 datos, dos de ellos de 0.0 minutos porque
+salieron de clics seguidos en una sesión de pruebas. Hay que esperar uso real y
+mirar `db/queries/tiempos-de-llegada.sql`, que reporta la cobertura **antes** que
+cualquier percentil justamente por esto.
+
+**Recursos fuera de las ciudades cubiertas.** Ya no urge: están los 3 388 del
+país. Y el término **satura a los 5 000 m**, así que solo importa lo que haya
+dentro de ese radio de donde llegan reportes — no hace falta perfección lejana.
+
+**El etiquetado de fotos** sigue sin ejecutarse nunca. Solo necesita
+`ollama pull gemma3:4b` y un `IA_MODELO` con visión. Es lo más visible que se
+puede hacer sin decidir nada de producto.
 
 ---
 
@@ -801,15 +989,35 @@ npm run trabajadores --workspace=@emergencias/api
 ### Pruebas y tipos
 
 ```bash
-npm run probar           # 59 pruebas contra emergencias_test
+npm run probar           # 76 pruebas contra emergencias_test
 npm run tipos            # tsc --noEmit en ambos paquetes
 ```
 
 ### Utilidades
 
 ```bash
-# fijar la clave de un operador
-npm run clave --workspace=@emergencias/api -- correo@ejemplo.co clave-larga
+# crear un operador, o cambiarle la clave si ya existe
+# (crea la organización si hace falta: todo operador necesita una)
+npm run clave --workspace=@emergencias/api -- correo@ejemplo.co clave-larga ADMIN "Nombre de la organización"
+
+# comprobar que DATABASE_URL conecta y que PostGIS está
+# traduce los tres errores típicos, que no se parecen a su causa
+npm run bd:probar-conexion
+
+# cambiar la contraseña dentro de DATABASE_URL, codificándola bien
+# (un @ o un # sin codificar parten la URL en dos)
+npm run bd:clave -- 'la-clave-nueva'
+
+# cargar recursos de emergencia desde un archivo (idempotente)
+node --env-file-if-exists=.env scripts/cargar-recursos.mjs db/recursos-colombia.json
+
+# probar una notificación push de punta a punta
+# cambia el estado POR LA API, que es lo que dispara el aviso
+node --env-file-if-exists=.env scripts/probar-notificacion.mjs RPT-XXXXX "clave" [ESTADO]
+
+# medir tiempos de llegada (calibración del umbral de estancados)
+docker exec -i emergencias_postgres psql -U emergencias -d emergencias \
+  < db/queries/tiempos-de-llegada.sql
 
 # consultas PostGIS de referencia
 docker cp db emergencias_postgres:/tmp/db
@@ -907,53 +1115,155 @@ llena con un toque.
 
 ---
 
+## 14. EL DESPLIEGUE
+
+Puesto en producción el 13 de agosto de 2026. Recibiendo reportes de personas
+reales desde ese día.
+
+### Direcciones
+
+| Qué | Dónde |
+|---|---|
+| **La aplicación** (lo que se comparte) | `https://mapa-emergencias.humanitario.workers.dev` |
+| API | `https://mapa-emergencias.onrender.com` |
+| Base de datos | Supabase, proyecto `xzjwrahxmmaphtrxzdgh`, región `us-east-2` |
+| Página de presentación | `docs/presentacion/index.html` |
+
+### Topología, y por qué
+
+```
+Navegador
+   │
+   ▼
+Cloudflare Workers ──── sirve la PWA (assets estáticos)
+   │                    y REENVÍA /v1 a la API
+   ▼
+Render (API Fastify, plan Free)
+   │
+   ▼
+Supabase (PostgreSQL 17.6 + PostGIS 3.3.7 + Storage)
+```
+
+**El reenvío de `/v1` desde el Worker no es un capricho.** La PWA llama a la API
+con rutas relativas, y eso es de lo que depende el modo sin conexión: un service
+worker **solo ve peticiones de su propio origen**. Si la PWA llamara directo a
+`onrender.com`, la bandeja de salida —lo que reintenta el reporte cuando vuelve
+la señal— dejaría de funcionar. En desarrollo lo resuelve el proxy de Vite; en
+producción, `worker/index.js`.
+
+Ese mismo Worker reenvía la IP real del visitante en `X-Forwarded-For`. Sin eso,
+el límite de 120 peticiones por minuto —que es **por IP**— se convertiría en 120
+para todo el mundo junto, y reventaría justo cuando varios vecinos reporten a la
+vez.
+
+### El cron
+
+`wrangler.jsonc` declara `*/10 * * * *`. El manejador `scheduled` de
+`worker/index.js` hace dos cosas, con un reintento cada una:
+
+1. **Despierta la API** (`GET /salud`). La instancia gratuita de Render hiberna
+   tras unos 15 minutos sin tráfico y tarda hasta un minuto en volver.
+2. **Refresca las prioridades** (`POST /v1/mantenimiento/refrescar-prioridades`).
+   Sin esto, dos términos del índice se congelan: la espera deja de crecer con el
+   reloj y un reporte de 12 horas pesa igual que uno de 10 minutos. **Ocurrió en
+   producción** hasta que el secreto llegó al Worker.
+
+### Configuración: qué va dónde
+
+| Sitio | Variables |
+|---|---|
+| **Render** | `DATABASE_URL`, `JWT_SECRETO`, `SECRETO_MANTENIMIENTO`, `NODE_ENV`, `IA_PROVEEDOR=ninguno`, `REDIS_URL=` (vacía), `SUPABASE_URL`, `SUPABASE_CLAVE_SERVICIO`, `VAPID_CLAVE_PUBLICA`, `VAPID_CLAVE_PRIVADA`, `VAPID_CONTACTO` |
+| **Cloudflare** | `API_ORIGEN` va en `wrangler.jsonc` (no es secreta); `SECRETO_MANTENIMIENTO` va como **Secret** en el panel |
+
+**Por qué `API_ORIGEN` está versionada y el secreto no:** `wrangler deploy`
+reescribe las variables del Worker con las del archivo en cada despliegue. Una
+variable puesta a mano en el panel funciona hasta el siguiente push y desaparece
+**sin avisar**. Los *secrets* sobreviven; las *variables* no.
+
+### Trampas del despliegue, para no repetirlas
+
+- **`DATABASE_URL` debe ser la del pooler**, no la directa. `db.<ref>.supabase.co`
+  es **solo IPv6** y muchas redes —incluida la de desarrollo— no lo tienen: falla
+  con `ENOTFOUND`, que no se parece a su causa. El pooler es
+  `aws-N-REGION.pooler.supabase.com` y **el usuario cambia** a
+  `postgres.<ref-del-proyecto>`.
+- **La cadena necesita `uselibpqcompat=true&sslmode=require`.** Sin lo primero,
+  `pg` valida la cadena de certificados del pooler y falla con
+  `self-signed certificate`.
+- **El build de Render debe estar acotado al workspace de la API.** Un
+  `npm install` en la raíz baja MapLibre, Vite, React y TypeScript —unos 111 MB
+  que la API nunca carga. El comando correcto es
+  `npm ci --omit=dev --workspace=@emergencias/api --include-workspace-root`.
+  El `--omit=dev` es seguro: Node ejecuta el TypeScript borrando tipos, así que
+  `typescript` no hace falta en ejecución.
+- **Cloudflare ya no ofrece crear proyectos de Pages** desde el panel (agosto de
+  2026); todo pasa por Workers con binding de assets. Por eso el proxy vive en
+  `worker/index.js` y no en un directorio `functions/`.
+- **Cambiar el subdominio de `workers.dev`** rompe la URL anterior de inmediato y
+  la nueva tarda unos minutos en tener certificado. Hacerlo antes de compartir
+  nada.
+
+### Datos cargados
+
+- **3 388 recursos** de emergencia de todo Colombia, desde OpenStreetMap
+  (`db/recursos-colombia.json`). Hospitales, puestos de salud, estaciones de
+  bomberos y de ambulancias.
+- **`lugares` está vacía.** No se sembró a propósito: los datos de desarrollo son
+  dos barrios de Bogotá y aparecerían como reales.
+- **Ningún dato de prueba en `reportes`.** Los que hay son de personas reales.
+
+### Verificación de que sigue vivo
+
+```bash
+curl -s https://mapa-emergencias.onrender.com/listo
+```
+
+Debe responder `{"estado":"listo"}` con cuatro comprobaciones en `ok`, incluida
+`almacen_medios: Supabase Storage`. Si dice `disco`, alguna de las dos variables
+de Supabase no llegó y **las fotos se están perdiendo en silencio**.
+
+```bash
+node --env-file-if-exists=.env scripts/probar-conexion.mjs
+```
+
+Comprueba la base y traduce los tres errores típicos, que no se parecen a su
+causa.
+
+---
+
 ## CHECKPOINT
 
-**Estado actual en una frase.** MVP funcional de punta a punta —reporte ciudadano
-offline-first, priorización auditable, triage con IA local, atención en campo con
-ruta y obstáculos, tablero con filtros cruzables— con **68 pruebas** pasando, 4
-commits en `origin/main` y cuatro cambios sin commit en el árbol de trabajo.
+**Estado actual en una frase.** Sistema **desplegado y en uso**: reporte
+ciudadano offline-first, priorización auditable con sus cinco términos activos,
+consulta por código, notificaciones push, atención en campo con ruta y
+obstáculos, tablero con filtros cruzables — con **76 pruebas** pasando, todo en
+`origin/main` y **reportes de personas reales entrando**.
 
-**Último cambio realizado.** Cuatro cambios sin commit todavía:
+**Último cambio realizado.** Commit `e6bc92f`: carga de los 3 374 recursos de
+emergencia de Colombia desde OpenStreetMap, con la migración `011` que cambia la
+identidad de un recurso del nombre a su identificador de origen. Sin ese cambio,
+665 filas se habrían fundido en silencio.
 
-1. **Partición del bundle.** `componentes/Mapa.tsx` se carga con `React.lazy` +
-   `<Suspense>` desde `paginas/Tablero.tsx`. La entrada pasó de **1 303 kB
-   (364 kB gzip)** a **243 kB (76 kB gzip)**; el CSS se partió solo también. La
-   vista «Reportar» ya no descarga MapLibre — verificado por `performance`.
-2. **El personal se dibuja en el tablero.** `GET /v1/campo/personal` dejó de ser
-   código muerto: capa propia en el mapa (anillo con núcleo blanco) más una tira
-   bajo el mapa con nombre, casos abiertos y edad de la posición. Tres franjas de
-   frescura en `lib/frescura.ts`, compartidas por mapa, leyenda y tira.
-3. **Alerta de estancados y filtro por severidad.** Mosaico «asignados sin
-   llegada» con filtro `estancados`, y la leyenda del mapa convertida en control
-   de severidad. La severidad es ortogonal al filtro de KPI, se cruza con AND, y
-   va a la cola **y** al GeoJSON del mapa (`GET /v1/tablero/cola` no aceptaba
-   `severidad`; ahora sí).
-4. **Hora de llegada al sitio, con procedencia** (migración `008_llegada.sql`).
-   Se intentó calibrar el umbral de estancados y se descubrió que el dato no se
-   recogía: 2 de cada 5 casos cerrados nunca pasaban por `EN_ATENCION`. Ahora
-   `reportes.llegada_en` + `llegada_origen` (`MARCADA` medida al llegar /
-   `DECLARADA` recordada al cerrar), el formulario de cierre pregunta «hace
-   cuántos minutos llegó», y la consulta de calibración vive en
-   `db/queries/tiempos-de-llegada.sql`. **De paso se arregló que la base de
-   pruebas nunca recibía migraciones nuevas** — ver §13.
+**Próxima tarea exacta.** Ninguna urgente, y eso es deliberado: **la beta lleva
+un día y lo que falta se decide escuchándola**. Ver §11 para la pregunta de fondo
+—si esto es una herramienta de triage o una plataforma de ayuda mutua— y por qué
+conviene no responderla todavía.
 
-**Próxima tarea exacta.** Nada bloqueante: esperar cobertura de horas de llegada
-antes de tocar el umbral (§11). Lo accionable hoy es el etiquetado de fotos, que
-solo necesita `ollama pull gemma3:4b`.
+Lo accionable sin decidir nada de producto:
 
-**Archivos relevantes para esa tarea.**
-`apps/api/src/servicios/ia/imagen.ts` · `apps/api/src/config.ts` (`IA_MODELO`) ·
-`docs/ia-local.md`
+1. **Sembrar `lugares`** con DIVIPOLA real. Es el hueco más visible: sin
+   geografía no hay resolución de zona y el panel de «Zonas» está vacío.
+2. **Etiquetado de fotos** — solo necesita `ollama pull gemma3:4b`.
 
-**Bloqueos actuales.** Ninguno técnico. Dos cosas requieren decisión o insumo de
-Cristian, no de quien programa:
+**Archivos relevantes.** `db/seeds/` y `apps/api/src/db/sembrar.ts` para lo
+primero; `apps/api/src/servicios/ia/imagen.ts` y `docs/ia-local.md` para lo
+segundo.
 
-- Etiquetado de fotos: falta bajar un modelo con visión
-  (`ollama pull gemma3:4b`, ~3.3 GB).
-- Producción: hace falta decidir proveedor de teselas y de ruteo, porque los
-  actuales (OSM y OSRM demo) no permiten tráfico de producción.
+**Bloqueos actuales.** Ninguno técnico.
 
-**Servicios que quedaron corriendo en esta sesión** (por si hay que reusarlos o
-bajarlos): contenedores `emergencias_postgres` (5434) y `emergencias_redis`
-(6381); API en 3010; Vite en 5180. Bajar con `docker compose down` y Ctrl+C.
+**Advertencia que no debe perderse.** El sistema tiene usuarios reales. Cualquier
+cambio que toque el alta de reportes, la bandeja de salida o el índice de
+prioridad afecta a gente que está pidiendo auxilio. Las reglas de §13 no son
+formalidades: la idempotencia por `id_cliente`, el guardado local antes de
+enviar, y que **recibir un reporte no dependa de nada opcional** son lo que
+sostiene eso.
